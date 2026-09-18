@@ -9,7 +9,7 @@ import java.time.Duration;
 import java.util.List;
 
 public class OllamaClient {
-    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(120);
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(300);
 
     private static final String SYSTEM_PROMPT = """
 You are a local reverse-engineering assistant embedded in Ghidra.
@@ -107,6 +107,36 @@ Do not claim an action succeeded; the Ghidra extension will report whether it wa
             throw new IOException("Ollama response did not contain message.content");
         }
         return content;
+    }
+
+    public String checkModel(String baseUrl, String model)
+            throws IOException, InterruptedException {
+
+        if (model == null || model.isBlank()) {
+            throw new IllegalArgumentException("Ollama model name is blank");
+        }
+
+        URI uri = localUri(baseUrl, "/api/show");
+        String payload = "{\"model\":" + jsonString(model.trim()) + "}";
+
+        HttpRequest request = HttpRequest.newBuilder(uri)
+            .timeout(Duration.ofSeconds(20))
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(payload))
+            .build();
+
+        HttpResponse<String> response =
+            client.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            String error = extractJsonStringField(response.body(), "error");
+            throw new IOException(
+                "Ollama model '" + model + "' is not available" +
+                (error == null ? "" : ": " + error)
+            );
+        }
+
+        return "Ollama model available: " + model;
     }
 
     public String check(String baseUrl) throws IOException, InterruptedException {
