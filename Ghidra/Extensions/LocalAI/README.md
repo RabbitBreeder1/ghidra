@@ -2,7 +2,7 @@
 
 A Ghidra preservation-analysis extension that connects CodeBrowser to a locally hosted Ollama model.
 
-Current LocalAI build ID: `2026-09-18-preservation-r7`.
+Current LocalAI build ID: `2026-09-18-preservation-r8`.
 
 ## Current features
 
@@ -94,6 +94,39 @@ qwen3-coder:30b
 ```
 
 You can type any installed Ollama model name into the Model field.
+
+## Fast LocalAI update on Windows
+
+For LocalAI-only changes, you no longer need to rebuild the full Ghidra distribution or manually
+delete the AppData extension.
+
+Close all Ghidra windows, pull the latest branch, then run:
+
+```powershell
+cd C:\GhidraLocalAI
+git checkout local-ai-extension
+git pull origin local-ai-extension
+.\Update-LocalAI.cmd
+```
+
+The updater:
+
+- refuses to replace the extension while Ghidra is running
+- runs LocalAI unit tests
+- builds only the LocalAI extension ZIP
+- validates the compiled JAR
+- backs up the currently installed LocalAI copy
+- stages the new extension before replacing the old one
+- compares SHA-256 hashes after installation
+- automatically rolls back to the previous installed copy if replacement/validation fails
+- installs to the correct `%APPDATA%\ghidra\ghidra_<version>_<release>\Extensions\LocalAI` folder
+- keeps the three newest backups under `build\localai-backups`
+- prints the installed LocalAI build ID and path when finished
+
+You can also double-click `Update-LocalAI.cmd` from the repository folder.
+
+A full `buildGhidra` is still required if we modify Ghidra core itself. The LocalAI project is
+currently isolated as an extension, so normal LocalAI iterations can use the fast updater.
 
 ## Build from this repository
 
