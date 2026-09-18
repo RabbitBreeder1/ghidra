@@ -100,17 +100,20 @@ You can type any installed Ollama model name into the Model field.
 For LocalAI-only changes, you no longer need to rebuild the full Ghidra distribution or manually
 delete the AppData extension.
 
-Close all Ghidra windows, pull the latest branch, then run:
+After the initial bootstrap, close all Ghidra windows and simply run:
 
 ```powershell
 cd C:\GhidraLocalAI
-git checkout local-ai-extension
-git pull origin local-ai-extension
 .\Update-LocalAI.cmd
 ```
 
+The updater safely checks out/pulls `local-ai-extension` itself using fast-forward-only Git updates.
+If tracked local changes exist, it refuses to pull rather than overwriting them.
+
 The updater:
 
+- safely updates the `local-ai-extension` branch with `git pull --ff-only`
+- refuses to overwrite tracked local Git changes
 - refuses to replace the extension while Ghidra is running
 - runs LocalAI unit tests
 - builds only the LocalAI extension ZIP
