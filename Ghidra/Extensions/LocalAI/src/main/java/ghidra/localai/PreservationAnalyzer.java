@@ -75,6 +75,8 @@ STRICT EVIDENCE RULES:
 - Do not infer Winsock, TCP, UDP, HTTP, HTTPS, TLS, authentication, matchmaking, telemetry,
   version checking, or session management merely because the program is a game.
 - A generic LoadLibrary/GetProcAddress call is NOT networking evidence by itself.
+- Game-folder module rankings are raw filename/string heuristics. They identify modules to inspect,
+  but do not confirm what a module does until stronger Ghidra evidence supports it.
 - Separate CONFIRMED EVIDENCE from EVIDENCE-BACKED HYPOTHESES.
 - A hypothesis is allowed only when you cite the exact supplied clue that supports it.
 - If there are no network findings and no preservation-relevant function assessments, explicitly
