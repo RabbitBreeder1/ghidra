@@ -38,6 +38,7 @@ public class LocalAIProvider extends ComponentProviderAdapter {
     private final LocalAIPlugin plugin;
     private final OllamaClient ollamaClient = new OllamaClient();
     private final AIActionParser actionParser = new AIActionParser();
+    private final EditIntentDetector editIntentDetector = new EditIntentDetector();
     private final ActionApplier actionApplier = new ActionApplier();
     private final List<ChatMessage> history = new ArrayList<>();
 
@@ -191,7 +192,8 @@ public class LocalAIProvider extends ComponentProviderAdapter {
 
         appendSystem(
             "LocalAI " + LocalAIBuildInfo.BUILD_ID + " ready. Static preservation actions never " +
-            "execute the target. Open a program and use Safe Preservation Workflow for the guided path."
+            "execute the target. Open a program and use Safe Preservation Workflow for the guided path.\n" +
+            "Loaded from: " + LocalAIBuildInfo.loadedFrom()
         );
     }
 
@@ -477,10 +479,25 @@ public class LocalAIProvider extends ComponentProviderAdapter {
                     return;
                 }
 
-                List<String> results =
-                    actionApplier.apply(pending.snapshot(), parsed.actions());
-                for (String result : results) {
-                    appendSystem(result);
+                List<AIAction> authorized = new ArrayList<>();
+                for (AIAction action : parsed.actions()) {
+                    if (editIntentDetector.authorizes(prompt, action)) {
+                        authorized.add(action);
+                    }
+                    else {
+                        appendSystem(
+                            "Ignored unauthorized AI edit request: " + action.type() +
+                            ". Your prompt did not explicitly authorize that edit type."
+                        );
+                    }
+                }
+
+                if (!authorized.isEmpty()) {
+                    List<String> results =
+                        actionApplier.apply(pending.snapshot(), authorized);
+                    for (String result : results) {
+                        appendSystem(result);
+                    }
                 }
             }
         }));
