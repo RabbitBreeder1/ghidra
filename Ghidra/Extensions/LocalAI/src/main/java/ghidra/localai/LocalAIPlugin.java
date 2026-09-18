@@ -18,11 +18,13 @@ public class LocalAIPlugin extends ProgramPlugin {
     private final ContextCollector contextCollector;
     private final ProtectionDetector protectionDetector;
     private final NetworkCommunicationScanner networkScanner;
+    private final GameFolderScanner gameFolderScanner;
     private final PreservationAnalyzer preservationAnalyzer;
     private final LocalAIProvider provider;
 
     private volatile ProtectionReport protectionReport = ProtectionReport.notScanned();
     private volatile NetworkReport networkReport = NetworkReport.notScanned();
+    private volatile GameFolderReport gameFolderReport = GameFolderReport.notScanned();
     private volatile PreservationAnalysisReport preservationReport =
         PreservationAnalysisReport.notRun();
 
@@ -31,6 +33,7 @@ public class LocalAIPlugin extends ProgramPlugin {
         contextCollector = new ContextCollector(tool);
         protectionDetector = new ProtectionDetector();
         networkScanner = new NetworkCommunicationScanner();
+        gameFolderScanner = new GameFolderScanner();
         preservationAnalyzer = new PreservationAnalyzer(tool);
         provider = new LocalAIProvider(tool, getName(), this);
     }
@@ -43,6 +46,7 @@ public class LocalAIPlugin extends ProgramPlugin {
             location,
             protectionReport,
             networkReport,
+            gameFolderReport,
             preservationReport
         );
     }
@@ -59,23 +63,34 @@ public class LocalAIPlugin extends ProgramPlugin {
         return report;
     }
 
+    public GameFolderReport scanGameFolder(java.util.function.Consumer<String> progress) {
+        GameFolderReport report = gameFolderScanner.scan(currentProgram, progress);
+        gameFolderReport = report;
+        return report;
+    }
+
     public PreservationAnalysisReport runPreservationAnalysis(
             OllamaClient ollama,
             String baseUrl,
             String model,
             java.util.function.Consumer<String> progress) throws Exception {
 
+        GameFolderReport folder = gameFolderScanner.scan(currentProgram, progress);
+        gameFolderReport = folder;
+
         PreservationAnalysisReport report = preservationAnalyzer.analyze(
             currentProgram,
             ollama,
             baseUrl,
             model,
+            folder,
             progress
         );
 
         preservationReport = report;
         protectionReport = report.protectionReport();
         networkReport = report.networkReport();
+        gameFolderReport = report.gameFolderReport();
         return report;
     }
 
@@ -98,6 +113,7 @@ public class LocalAIPlugin extends ProgramPlugin {
     private void resetProgramScans() {
         protectionReport = ProtectionReport.notScanned();
         networkReport = NetworkReport.notScanned();
+        gameFolderReport = GameFolderReport.notScanned();
         preservationReport = PreservationAnalysisReport.notRun();
     }
 
