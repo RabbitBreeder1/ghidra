@@ -7,5 +7,6 @@ public record GameModuleFinding(
         String relativePath,
         long fileSize,
         int score,
-        List<String> evidence) {
+        List<String> evidence,
+        List<GameEvidenceHit> evidenceHits) {
 }
