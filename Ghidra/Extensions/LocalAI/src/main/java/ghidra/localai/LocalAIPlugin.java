@@ -9,7 +9,7 @@ import ghidra.program.util.ProgramLocation;
 
 @PluginInfo(
     status = PluginStatus.RELEASED,
-    packageName = "Local AI",
+    packageName = LocalAIPluginPackage.NAME,
     category = "Analysis",
     shortDescription = "Local Ollama AI assistant",
     description = "Dockable local AI chat using current Ghidra decompiler context with undoable AI edits."
