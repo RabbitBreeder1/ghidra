@@ -127,6 +127,7 @@ The objective is interoperability research and preservation, not speculation.
 
         Map<Address, Candidate> candidates = new LinkedHashMap<>();
         addNetworkCandidates(program, network, candidates);
+        addMappedFolderCandidates(program, gameFolder, candidates);
 
         update(progress, "Finding dynamically resolved networking...");
         addDynamicResolutionCandidates(program, candidates);
@@ -224,6 +225,109 @@ The objective is interoperability research and preservation, not speculation.
                 candidate.addEvidence(finding.kind() + ": " + finding.value());
             }
         }
+    }
+
+    private void addMappedFolderCandidates(
+            Program program,
+            GameFolderReport gameFolder,
+            Map<Address, Candidate> candidates) {
+
+        if (gameFolder == null || gameFolder.modules() == null) {
+            return;
+        }
+
+        for (GameModuleFinding module : gameFolder.modules()) {
+            if (module.evidenceHits() == null) {
+                continue;
+            }
+
+            for (GameEvidenceHit hit : module.evidenceHits()) {
+                if (hit.mappedAddress() == null || hit.mappedAddress().isBlank()) {
+                    continue;
+                }
+
+                Address[] addresses = program.parseAddress(hit.mappedAddress());
+                if (addresses.length == 0) {
+                    continue;
+                }
+
+                Address address = addresses[0];
+                LinkedHashSet<Function> referencedFunctions = new LinkedHashSet<>();
+
+                ReferenceIterator refs =
+                    program.getReferenceManager().getReferencesTo(address);
+
+                while (refs.hasNext()) {
+                    Reference ref = refs.next();
+                    Function function =
+                        program.getFunctionManager().getFunctionContaining(ref.getFromAddress());
+                    if (function != null && !function.isExternal()) {
+                        referencedFunctions.add(function);
+                    }
+                }
+
+                Function containing =
+                    program.getFunctionManager().getFunctionContaining(address);
+                if (containing != null && !containing.isExternal()) {
+                    referencedFunctions.add(containing);
+                }
+
+                int score = scoreRawHit(hit);
+                for (Function function : referencedFunctions) {
+                    Candidate candidate = candidates.computeIfAbsent(
+                        function.getEntryPoint(),
+                        ignored -> new Candidate(function)
+                    );
+
+                    candidate.addScore(score);
+                    candidate.addEvidence(
+                        "Raw mapped marker " + hit.marker() +
+                        " @ file+0x" + Long.toHexString(hit.fileOffset()).toUpperCase(Locale.ROOT) +
+                        " -> " + hit.mappedAddress()
+                    );
+                }
+            }
+        }
+    }
+
+    private int scoreRawHit(GameEvidenceHit hit) {
+        if (hit == null || hit.marker() == null) {
+            return 0;
+        }
+
+        String marker = hit.marker().toLowerCase(Locale.ROOT);
+
+        if (marker.contains("ws2_32") ||
+            marker.contains("winhttp") ||
+            marker.contains("wininet") ||
+            marker.contains("curl_easy_perform") ||
+            marker.contains("ssl_connect") ||
+            marker.contains("getaddrinfo") ||
+            marker.contains("gethostbyname") ||
+            marker.contains("steamnetworking") ||
+            marker.contains("eos_") ||
+            marker.contains("raknet") ||
+            marker.contains("enet_") ||
+            marker.contains("gamespy")) {
+            return 14;
+        }
+
+        if (marker.equals("libcurl") ||
+            marker.equals("libssl") ||
+            marker.equals("authorization:") ||
+            marker.equals("wss://")) {
+            return 9;
+        }
+
+        if (marker.contains("/login") ||
+            marker.contains("/auth") ||
+            marker.contains("/api/") ||
+            marker.contains("/match") ||
+            marker.contains("/lobby")) {
+            return 6;
+        }
+
+        return 4;
     }
 
     private void addDynamicResolutionCandidates(
