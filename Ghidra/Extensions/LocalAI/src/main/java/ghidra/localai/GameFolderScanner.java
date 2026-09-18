@@ -52,9 +52,10 @@ public class GameFolderScanner {
         new Marker("internetconnect", 13, "WinINet connection API"),
         new Marker("winhttpconnect", 14, "WinHTTP connection API"),
         new Marker("winhttpsendrequest", 14, "WinHTTP request API"),
-        new Marker("http://", 8, "HTTP URL"),
-        new Marker("https://", 10, "HTTPS URL"),
         new Marker("wss://", 12, "WebSocket URL"),
+        new Marker("authorization:", 8, "Authorization header"),
+        new Marker("application/json", 5, "JSON web/API payload marker"),
+        new Marker("/api/", 6, "API path"),
         new Marker("/login", 8, "Login endpoint/path"),
         new Marker("/auth", 8, "Authentication endpoint/path"),
         new Marker("/match", 7, "Matchmaking endpoint/path"),
@@ -176,6 +177,7 @@ public class GameFolderScanner {
 
     private ModuleScan scanFile(File file, long maxBytes) {
         Set<String> evidence = new LinkedHashSet<>();
+        Set<String> matchedMarkers = new LinkedHashSet<>();
         int score = 0;
 
         String lowerName = file.getName().toLowerCase(Locale.ROOT);
@@ -214,7 +216,8 @@ public class GameFolderScanner {
                     .toLowerCase(Locale.ROOT);
 
                 for (Marker marker : MARKERS) {
-                    if (ascii.contains(marker.value())) {
+                    if (ascii.contains(marker.value()) &&
+                        matchedMarkers.add(marker.value())) {
                         score += marker.weight();
                         addEvidence(evidence, marker.description() + ": " + marker.value());
                     }
@@ -222,7 +225,8 @@ public class GameFolderScanner {
 
                 String utf16Collapsed = collapseUtf16LeAscii(combined).toLowerCase(Locale.ROOT);
                 for (Marker marker : MARKERS) {
-                    if (utf16Collapsed.contains(marker.value())) {
+                    if (utf16Collapsed.contains(marker.value()) &&
+                        matchedMarkers.add(marker.value())) {
                         score += marker.weight();
                         addEvidence(evidence,
                             marker.description() + " (UTF-16LE): " + marker.value());
