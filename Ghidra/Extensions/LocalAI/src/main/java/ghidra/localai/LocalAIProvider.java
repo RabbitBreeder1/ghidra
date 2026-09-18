@@ -47,6 +47,7 @@ public class LocalAIProvider extends ComponentProviderAdapter {
     private JTextField urlField;
     private JTextField modelField;
     private JCheckBox allowEdits;
+    private JLabel buildLabel;
     private JLabel statusLabel;
     private JLabel contextLabel;
     private JButton sendButton;
@@ -99,7 +100,8 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         mainPanel = new JPanel(new BorderLayout(6, 6));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
 
-        JPanel settings = new JPanel(new GridLayout(10, 2, 5, 4));
+        JPanel settings = new JPanel(new GridLayout(11, 2, 5, 4));
+        buildLabel = new JLabel(LocalAIBuildInfo.BUILD_ID);
         urlField = new JTextField(DEFAULT_URL);
         modelField = new JTextField(DEFAULT_MODEL);
         allowEdits = new JCheckBox("Allow AI edits (undoable)", true);
@@ -109,8 +111,10 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         gameFolderScanButton = new JButton("Analyze Game Folder");
         offlineBlockEnableButton = new JButton("Enable Offline Trace Block");
         offlineBlockRemoveButton = new JButton("Remove Offline Trace Block");
-        preservationAnalysisButton = new JButton("Preservation Analysis (AI)");
+        preservationAnalysisButton = new JButton("Safe Preservation Workflow");
 
+        settings.add(new JLabel("LocalAI build"));
+        settings.add(buildLabel);
         settings.add(new JLabel("Ollama URL (loopback only)"));
         settings.add(urlField);
         settings.add(new JLabel("Model"));
@@ -186,8 +190,8 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         });
 
         appendSystem(
-            "LocalAI ready. Open a program, place the cursor inside a function, and ask about it. " +
-            "The current decompiled function is attached to every request."
+            "LocalAI " + LocalAIBuildInfo.BUILD_ID + " ready. Static preservation actions never " +
+            "execute the target. Open a program and use Safe Preservation Workflow for the guided path."
         );
     }
 
@@ -369,16 +373,17 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         }
 
         setBusy(true);
-        statusLabel.setText("Status: starting preservation analysis...");
+        statusLabel.setText("Status: starting safe preservation workflow...");
         appendSystem(
-            "Starting one-button preservation analysis. " +
-            "Ghidra will prioritize server/network/auth-related functions and Qwen will review " +
-            "at most 18 of the strongest candidates in this first pass."
+            "Starting Safe Preservation Workflow. This static workflow does NOT execute the target. " +
+            "It will check analysis readiness, verify local Ollama, scan adjacent modules, run " +
+            "protection/network discovery, map raw hits into Ghidra where possible, and review only " +
+            "the strongest preservation-relevant functions."
         );
 
         CompletableFuture.supplyAsync(() -> {
             try {
-                return plugin.runPreservationAnalysis(
+                return plugin.runSafePreservationWorkflow(
                     ollamaClient,
                     url,
                     model,
@@ -390,24 +395,27 @@ public class LocalAIProvider extends ComponentProviderAdapter {
             catch (Exception e) {
                 throw new RuntimeException(e);
             }
-        }).whenComplete((report, error) -> SwingUtilities.invokeLater(() -> {
+        }).whenComplete((result, error) -> SwingUtilities.invokeLater(() -> {
             setBusy(false);
 
             if (error != null) {
-                statusLabel.setText("Status: preservation analysis failed");
-                appendSystem("Preservation analysis failed: " + rootMessage(error));
+                statusLabel.setText("Status: safe preservation workflow failed");
+                appendSystem("Safe preservation workflow failed: " + rootMessage(error));
                 return;
             }
 
-            statusLabel.setText("Status: preservation analysis complete");
-            appendSystem(report.toDisplayText());
+            statusLabel.setText("Status: safe preservation workflow complete");
+            appendSystem(result.toDisplayText());
 
-            String summary = report.synthesis();
-            if (summary != null && !summary.isBlank()) {
-                history.add(new ChatMessage(
-                    "assistant",
-                    "Preservation analysis result:\n" + summary.trim()
-                ));
+            PreservationAnalysisReport report = result.preservation();
+            if (report != null) {
+                String summary = report.synthesis();
+                if (summary != null && !summary.isBlank()) {
+                    history.add(new ChatMessage(
+                        "assistant",
+                        "Preservation analysis result:\n" + summary.trim()
+                    ));
+                }
             }
         }));
     }
