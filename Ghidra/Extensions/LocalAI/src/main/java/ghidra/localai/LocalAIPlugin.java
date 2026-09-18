@@ -19,6 +19,7 @@ public class LocalAIPlugin extends ProgramPlugin {
     private final ProtectionDetector protectionDetector;
     private final NetworkCommunicationScanner networkScanner;
     private final GameFolderScanner gameFolderScanner;
+    private final OfflineTraceFirewall offlineTraceFirewall;
     private final PreservationAnalyzer preservationAnalyzer;
     private final LocalAIProvider provider;
 
@@ -34,6 +35,7 @@ public class LocalAIPlugin extends ProgramPlugin {
         protectionDetector = new ProtectionDetector();
         networkScanner = new NetworkCommunicationScanner();
         gameFolderScanner = new GameFolderScanner();
+        offlineTraceFirewall = new OfflineTraceFirewall();
         preservationAnalyzer = new PreservationAnalyzer(tool);
         provider = new LocalAIProvider(tool, getName(), this);
     }
@@ -67,6 +69,14 @@ public class LocalAIPlugin extends ProgramPlugin {
         GameFolderReport report = gameFolderScanner.scan(currentProgram, progress);
         gameFolderReport = report;
         return report;
+    }
+
+    public OfflineTraceFirewallReport enableOfflineTraceFirewall() {
+        return offlineTraceFirewall.enable(currentProgram);
+    }
+
+    public OfflineTraceFirewallReport disableOfflineTraceFirewall() {
+        return offlineTraceFirewall.disable(currentProgram);
     }
 
     public PreservationAnalysisReport runPreservationAnalysis(
