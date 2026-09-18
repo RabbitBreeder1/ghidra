@@ -32,7 +32,7 @@ import ghidra.program.util.ProgramLocation;
 
 public class LocalAIProvider extends ComponentProviderAdapter {
     private static final String DEFAULT_URL = "http://127.0.0.1:11434";
-    private static final String DEFAULT_MODEL = "qwen2.5-coder:7b";
+    private static final String DEFAULT_MODEL = "qwen3-coder:30b";
 
     private final LocalAIPlugin plugin;
     private final OllamaClient ollamaClient = new OllamaClient();
@@ -92,11 +92,12 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         mainPanel = new JPanel(new BorderLayout(6, 6));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
 
-        JPanel settings = new JPanel(new GridLayout(4, 2, 5, 4));
+        JPanel settings = new JPanel(new GridLayout(5, 2, 5, 4));
         urlField = new JTextField(DEFAULT_URL);
         modelField = new JTextField(DEFAULT_MODEL);
         allowEdits = new JCheckBox("Allow AI edits (undoable)", true);
         checkButton = new JButton("Check Ollama");
+        protectionScanButton = new JButton("DRM / Protector Scan");
 
         settings.add(new JLabel("Ollama URL (loopback only)"));
         settings.add(urlField);
@@ -104,6 +105,8 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         settings.add(modelField);
         settings.add(allowEdits);
         settings.add(checkButton);
+        settings.add(new JLabel("Static check"));
+        settings.add(protectionScanButton);
 
         statusLabel = new JLabel("Status: not checked");
         contextLabel = new JLabel("Context: no active program");
@@ -142,6 +145,7 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         sendButton.addActionListener(e -> send());
         clearButton.addActionListener(e -> clearChat());
         checkButton.addActionListener(e -> checkOllama());
+        protectionScanButton.addActionListener(e -> scanProtection());
 
         input.getInputMap().put(
             KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.CTRL_DOWN_MASK),
@@ -187,6 +191,29 @@ public class LocalAIProvider extends ComponentProviderAdapter {
                 appendSystem(result + " at " + url);
             }
         }));
+    }
+
+    private void scanProtection() {
+        if (busy) {
+            return;
+        }
+
+        setBusy(true);
+        statusLabel.setText("Status: scanning DRM/protectors...");
+
+        CompletableFuture.supplyAsync(plugin::scanProtection)
+            .whenComplete((report, error) -> SwingUtilities.invokeLater(() -> {
+                setBusy(false);
+
+                if (error != null) {
+                    statusLabel.setText("Status: DRM scan failed");
+                    appendSystem("DRM/protector scan failed: " + rootMessage(error));
+                    return;
+                }
+
+                statusLabel.setText("Status: DRM scan complete");
+                appendSystem(report.toDisplayText());
+            }));
     }
 
     private void send() {
@@ -266,6 +293,7 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         busy = value;
         sendButton.setEnabled(!value);
         checkButton.setEnabled(!value);
+        protectionScanButton.setEnabled(!value);
     }
 
     private void appendUser(String text) {
