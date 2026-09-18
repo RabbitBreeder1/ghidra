@@ -5,6 +5,7 @@ import java.util.List;
 public record PreservationAnalysisReport(
         ProtectionReport protectionReport,
         NetworkReport networkReport,
+        GameFolderReport gameFolderReport,
         List<PreservationFunctionAssessment> functions,
         String synthesis,
         String note) {
@@ -13,6 +14,7 @@ public record PreservationAnalysisReport(
         return new PreservationAnalysisReport(
             ProtectionReport.notScanned(),
             NetworkReport.notScanned(),
+            GameFolderReport.notScanned(),
             List.of(),
             "",
             "One-button preservation analysis has not been run for the current program."
