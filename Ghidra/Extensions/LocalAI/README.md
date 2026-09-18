@@ -58,6 +58,13 @@ locally hosted Ollama model.
     HTTP(S)/WebSocket URLs, and common login/auth/match/lobby paths
   - reports the strongest modules to import into Ghidra next
   - feeds the ranked module report into later LocalAI chat context.
+- **Offline Trace firewall safety actions (Windows)**:
+  - **Enable Offline Trace Block** asks for confirmation, triggers a UAC prompt, and creates
+    program-specific inbound and outbound Windows Firewall block rules for the loaded executable
+  - **Remove Offline Trace Block** removes only the LocalAI rules created for that executable
+  - these actions do not execute the target and do not yet launch Ghidra's debugger
+  - separate launcher/helper processes are not automatically covered and must be handled before
+    dynamic tracing if the game uses them
 - **Preservation Analysis (AI)** one-button workflow:
   - automatically runs game-folder module analysis, DRM/protector scanning, and network/server discovery
   - finds functions referenced by network APIs/endpoints
