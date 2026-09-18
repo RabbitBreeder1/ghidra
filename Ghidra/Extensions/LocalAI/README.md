@@ -49,6 +49,19 @@ locally hosted Ollama model.
   about likely login, matchmaking, telemetry, HTTP/API, socket, and server-connection code.
 - Static network scanning does not capture runtime DNS, endpoints decrypted/assembled at runtime,
   dynamically loaded APIs, or custom encrypted protocols; those require dynamic tracing.
+- **Preservation Analysis (AI)** one-button workflow:
+  - automatically runs DRM/protector and network/server discovery
+  - finds functions referenced by network APIs/endpoints
+  - looks for dynamic resolution through LoadLibrary/GetProcAddress/LdrLoadDll
+  - searches for hidden networking DLL/API-name strings
+  - expands one call-graph hop around strong candidates
+  - ranks candidate functions
+  - decompiles and sends at most the top 18 functions to the local Ollama model
+  - asks Qwen to classify likely login/auth, version, matchmaking, session, telemetry,
+    and real-time networking roles
+  - synthesizes a persistent preservation report that becomes part of later chat context
+- The one-button workflow is deliberately bounded so a large game does not trigger thousands of
+  local-model requests.
 
 ## Default model
 
