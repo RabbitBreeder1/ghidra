@@ -103,6 +103,10 @@ public class LocalAIPlugin extends ProgramPlugin {
             progress.accept("Checking local Ollama...");
         }
         ollama.check(baseUrl);
+        if (progress != null) {
+            progress.accept("Checking Ollama model " + model + "...");
+        }
+        ollama.checkModel(baseUrl, model);
 
         PreservationAnalysisReport preservation = runPreservationAnalysis(
             ollama,
