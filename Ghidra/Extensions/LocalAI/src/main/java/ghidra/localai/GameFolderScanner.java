@@ -26,7 +26,6 @@ import ghidra.program.model.symbol.ReferenceIterator;
 
 public class GameFolderScanner {
     private static final int MAX_FILES = 300;
-    private static final int MAX_DEPTH = 3;
     private static final long MAX_TOTAL_BYTES = 2L * 1024 * 1024 * 1024;
     private static final long MAX_BYTES_PER_FILE = 96L * 1024 * 1024;
     private static final int BUFFER_SIZE = 256 * 1024;
@@ -123,10 +122,11 @@ public class GameFolderScanner {
         }
 
         List<Path> files = new ArrayList<>();
-        try (Stream<Path> stream = Files.walk(root.toPath(), MAX_DEPTH)) {
+        boolean enumerationTruncated = false;
+        try (Stream<Path> stream = Files.walk(root.toPath())) {
             stream.filter(Files::isRegularFile)
                 .filter(GameFolderScanner::isExecutableModule)
-                .limit(MAX_FILES)
+                .limit(MAX_FILES + 1L)
                 .forEach(files::add);
         }
         catch (IOException e) {
@@ -135,9 +135,14 @@ public class GameFolderScanner {
             );
         }
 
+        if (files.size() > MAX_FILES) {
+            enumerationTruncated = true;
+            files = new ArrayList<>(files.subList(0, MAX_FILES));
+        }
+
         List<GameModuleFinding> findings = new ArrayList<>();
         long totalBytesScanned = 0;
-        boolean truncated = false;
+        boolean truncated = enumerationTruncated;
         int index = 0;
 
         for (Path path : files) {
@@ -151,7 +156,12 @@ public class GameFolderScanner {
                 ": " + path.getFileName());
 
             long remaining = MAX_TOTAL_BYTES - totalBytesScanned;
-            ModuleScan scan = scanFile(path.toFile(), Math.min(MAX_BYTES_PER_FILE, remaining));
+            boolean currentExecutable = sameFile(executable.toPath(), path);
+            long perFileBudget = currentExecutable
+                ? remaining
+                : Math.min(MAX_BYTES_PER_FILE, remaining);
+
+            ModuleScan scan = scanFile(path.toFile(), perFileBudget);
             totalBytesScanned += scan.bytesScanned();
 
             if (scan.truncated()) {
@@ -323,6 +333,20 @@ public class GameFolderScanner {
             bytesScanned,
             truncated
         );
+    }
+
+    private static boolean sameFile(Path left, Path right) {
+        if (left == null || right == null) {
+            return false;
+        }
+
+        try {
+            return Files.isSameFile(left, right);
+        }
+        catch (IOException e) {
+            return left.toAbsolutePath().normalize()
+                .equals(right.toAbsolutePath().normalize());
+        }
     }
 
     private static boolean isExecutableModule(Path path) {
