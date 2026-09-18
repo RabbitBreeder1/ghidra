@@ -37,7 +37,7 @@ public record GameFolderReport(
         sb.append("Executable/DLL files considered: ").append(filesConsidered).append('\n');
         sb.append("Bytes scanned: ").append(bytesScanned);
         if (truncated) {
-            sb.append(" (scan limit reached)");
+            sb.append(" (one or more large modules were sampled rather than fully scanned)");
         }
         sb.append("\n\n");
 
