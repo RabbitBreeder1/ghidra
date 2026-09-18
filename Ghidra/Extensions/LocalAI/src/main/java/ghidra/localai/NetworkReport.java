@@ -77,9 +77,12 @@ public record NetworkReport(
                 "This does not rule out runtime-resolved, encrypted, embedded, or custom networking.";
         }
 
+        final int maxPromptChars = 16_000;
         StringBuilder sb = new StringBuilder();
+
         for (NetworkFinding finding : findings) {
-            sb.append(finding.kind())
+            StringBuilder line = new StringBuilder();
+            line.append(finding.kind())
                 .append(" | ")
                 .append(finding.value())
                 .append(" | ")
@@ -87,11 +90,19 @@ public record NetworkReport(
 
             if (finding.referencingFunctions() != null &&
                 !finding.referencingFunctions().isEmpty()) {
-                sb.append(" | local functions: ")
+                line.append(" | local functions: ")
                     .append(String.join(", ", finding.referencingFunctions()));
             }
-            sb.append('\n');
+            line.append('\n');
+
+            if (sb.length() + line.length() > maxPromptChars) {
+                sb.append("... additional network findings omitted from AI prompt context ...\n");
+                break;
+            }
+
+            sb.append(line);
         }
+
         return sb.toString().trim();
     }
 }
