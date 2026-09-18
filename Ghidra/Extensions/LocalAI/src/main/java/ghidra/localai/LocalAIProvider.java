@@ -109,8 +109,8 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         protectionScanButton = new JButton("DRM / Protector Scan");
         networkScanButton = new JButton("Network / Server Scan");
         gameFolderScanButton = new JButton("Analyze Game Folder");
-        offlineBlockEnableButton = new JButton("Enable Offline Trace Block");
-        offlineBlockRemoveButton = new JButton("Remove Offline Trace Block");
+        offlineBlockEnableButton = new JButton("Enable Safe Offline Block (Folder)");
+        offlineBlockRemoveButton = new JButton("Remove Safe Offline Block");
         preservationAnalysisButton = new JButton("Safe Preservation Workflow");
 
         settings.add(new JLabel("LocalAI build"));
@@ -305,11 +305,10 @@ public class LocalAIProvider extends ComponentProviderAdapter {
 
         int choice = JOptionPane.showConfirmDialog(
             mainPanel,
-            "This will request administrator permission and create inbound/outbound Windows " +
-            "Firewall BLOCK rules for the currently loaded executable.\n\n" +
-            "It does NOT launch the game and it does NOT automatically block separate launcher " +
-            "or helper processes. Continue?",
-            "Enable Offline Trace Network Block",
+            "This will request administrator permission and create verified inbound/outbound Windows " +
+            "Firewall BLOCK rules for every EXE found under the loaded game's folder (bounded " +
+            "recursive scan).\n\nIt does NOT launch the game. Continue?",
+            "Enable Safe Offline Game-Folder Block",
             JOptionPane.YES_NO_OPTION,
             JOptionPane.WARNING_MESSAGE
         );
