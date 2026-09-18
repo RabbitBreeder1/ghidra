@@ -1,5 +1,7 @@
 package ghidra.localai;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -13,6 +15,8 @@ import ghidra.program.model.mem.MemoryBlock;
 
 public class ProtectionDetector {
     private static final int MAX_DEFINED_STRINGS = 100_000;
+    private static final int MAX_ENTROPY_SAMPLE_BYTES = 1024 * 1024;
+    private static final int MIN_ENTROPY_SAMPLE_BYTES = 4096;
 
     private final Map<String, FindingBuilder> findings = new LinkedHashMap<>();
 
@@ -33,8 +37,9 @@ public class ProtectionDetector {
         }
 
         String note =
-            "Heuristic static detection only. A hit can indicate platform SDK/protection integration " +
-            "without proving DRM is actively enforced, and no hit does not prove the executable is unprotected.";
+            "Heuristic static detection only. Named signatures, section structure, permissions, " +
+            "and sampled entropy can suggest packing or anti-tamper, but none alone proves a " +
+            "specific DRM is active. No hit does not prove the executable is unprotected.";
 
         return new ProtectionReport(
             List.copyOf(output),
@@ -105,7 +110,109 @@ public class ProtectionDetector {
                 add("UPX", "Executable packer (not DRM by itself)", "HIGH",
                     "Memory section: " + name);
             }
+
+            scanStructuralHeuristics(block);
         }
+    }
+
+    private void scanStructuralHeuristics(MemoryBlock block) {
+        if (!block.isLoaded() || !block.isInitialized() || block.getSize() < MIN_ENTROPY_SAMPLE_BYTES) {
+            return;
+        }
+
+        if (block.isExecute() && block.isWrite()) {
+            add(
+                "Writable + executable section",
+                "Structural heuristic; runtime unpacking/self-modifying code possible",
+                "MEDIUM",
+                "Section " + block.getName() + " permissions=RWX size=" + block.getSize()
+            );
+        }
+
+        double entropy = sampleEntropy(block);
+        if (Double.isNaN(entropy)) {
+            return;
+        }
+
+        if (block.isExecute() && entropy >= 7.40) {
+            add(
+                "High-entropy executable region",
+                "Entropy heuristic; packed/encrypted/virtualized code possible",
+                "MEDIUM",
+                "Section " + block.getName() +
+                    " sampled entropy=" + String.format(Locale.ROOT, "%.3f", entropy) +
+                    " bits/byte, size=" + block.getSize()
+            );
+        }
+        else if (block.isExecute() && entropy >= 7.10 && !isCommonExecutableSection(block.getName())) {
+            add(
+                "Unusual executable section",
+                "Structural/entropy heuristic",
+                "LOW",
+                "Section " + block.getName() +
+                    " sampled entropy=" + String.format(Locale.ROOT, "%.3f", entropy) +
+                    " bits/byte"
+            );
+        }
+    }
+
+    private double sampleEntropy(MemoryBlock block) {
+        int sampleSize = (int)Math.min(block.getSize(), MAX_ENTROPY_SAMPLE_BYTES);
+        if (sampleSize < MIN_ENTROPY_SAMPLE_BYTES) {
+            return Double.NaN;
+        }
+
+        byte[] buffer = new byte[sampleSize];
+        int total = 0;
+
+        try (InputStream in = block.getData()) {
+            if (in == null) {
+                return Double.NaN;
+            }
+
+            while (total < sampleSize) {
+                int read = in.read(buffer, total, sampleSize - total);
+                if (read < 0) {
+                    break;
+                }
+                total += read;
+            }
+        }
+        catch (IOException e) {
+            return Double.NaN;
+        }
+
+        if (total < MIN_ENTROPY_SAMPLE_BYTES) {
+            return Double.NaN;
+        }
+
+        long[] counts = new long[256];
+        for (int i = 0; i < total; i++) {
+            counts[buffer[i] & 0xff]++;
+        }
+
+        double entropy = 0.0;
+        for (long count : counts) {
+            if (count == 0) {
+                continue;
+            }
+            double p = (double)count / total;
+            entropy -= p * (Math.log(p) / Math.log(2.0));
+        }
+        return entropy;
+    }
+
+    private static boolean isCommonExecutableSection(String name) {
+        if (name == null) {
+            return false;
+        }
+
+        String value = name.toLowerCase(Locale.ROOT);
+        return value.equals(".text") ||
+            value.equals("text") ||
+            value.equals(".code") ||
+            value.equals("code") ||
+            value.startsWith(".text$");
     }
 
     private ScanCount scanDefinedStrings(Program program) {
