@@ -59,9 +59,18 @@ public record GameFolderReport(
                     .append(module.score())
                     .append("] ")
                     .append(module.relativePath())
-                    .append("\n  Evidence: ")
-                    .append(String.join("; ", module.evidence()))
                     .append('\n');
+
+                if (module.evidenceHits() != null && !module.evidenceHits().isEmpty()) {
+                    for (GameEvidenceHit hit : module.evidenceHits()) {
+                        sb.append("  - ").append(hit.toDisplayText()).append('\n');
+                    }
+                }
+                else {
+                    sb.append("  Evidence: ")
+                        .append(String.join("; ", module.evidence()))
+                        .append('\n');
+                }
             }
         }
 
