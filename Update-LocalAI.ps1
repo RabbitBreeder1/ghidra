@@ -1,5 +1,6 @@
 param(
-    [switch]$SkipTests
+    [switch]$SkipTests,
+    [switch]$SkipPull
 )
 
 $ErrorActionPreference = "Stop"
@@ -35,6 +36,51 @@ if (-not (Test-Path -LiteralPath $gradle)) {
 
 if (-not (Test-Path -LiteralPath $appProperties)) {
     throw "Ghidra application.properties was not found."
+}
+
+if (-not $SkipPull) {
+    Write-Step "Updating the local-ai-extension branch"
+
+    $git = Get-Command git.exe -ErrorAction SilentlyContinue
+    if (-not $git) {
+        throw "git.exe was not found in PATH. Install Git or run the updater with -SkipPull."
+    }
+
+    $trackedChanges = @(
+        & git status --porcelain --untracked-files=no
+    )
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "git status failed."
+    }
+
+    if ($trackedChanges.Count -gt 0) {
+        Write-Host "Tracked local changes were detected:" -ForegroundColor Yellow
+        $trackedChanges | ForEach-Object { Write-Host ("  " + $_) }
+        throw "Updater stopped to avoid overwriting local work. Commit/stash the changes, then run again."
+    }
+
+    $currentBranch = (& git rev-parse --abbrev-ref HEAD).Trim()
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not determine the current Git branch."
+    }
+
+    if ($currentBranch -ne "local-ai-extension") {
+        & git checkout local-ai-extension
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not switch to the local-ai-extension branch."
+        }
+    }
+
+    & git fetch origin local-ai-extension
+    if ($LASTEXITCODE -ne 0) {
+        throw "git fetch failed."
+    }
+
+    & git pull --ff-only origin local-ai-extension
+    if ($LASTEXITCODE -ne 0) {
+        throw "git pull --ff-only failed. The updater will not merge or overwrite local history automatically."
+    }
 }
 
 Write-Step "Checking whether Ghidra is running"
