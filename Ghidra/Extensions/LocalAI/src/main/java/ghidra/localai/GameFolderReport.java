@@ -97,12 +97,30 @@ public record GameFolderReport(
                 sb.append("... additional modules omitted ...\n");
                 break;
             }
+
             sb.append(module.fileName())
                 .append(" | score=")
                 .append(module.score())
-                .append(" | ")
-                .append(String.join("; ", module.evidence()))
-                .append('\n');
+                .append(" | ");
+
+            if (module.evidenceHits() != null && !module.evidenceHits().isEmpty()) {
+                int hitCount = 0;
+                for (GameEvidenceHit hit : module.evidenceHits()) {
+                    if (hitCount++ >= 8) {
+                        sb.append("... more hits omitted ...");
+                        break;
+                    }
+                    if (hitCount > 1) {
+                        sb.append("; ");
+                    }
+                    sb.append(hit.toDisplayText());
+                }
+            }
+            else {
+                sb.append(String.join("; ", module.evidence()));
+            }
+
+            sb.append('\n');
         }
         return sb.toString().trim();
     }
