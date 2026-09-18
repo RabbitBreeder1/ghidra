@@ -53,13 +53,13 @@ public class GameFolderScanner {
         new Marker("winhttpconnect", 14, "WinHTTP connection API"),
         new Marker("winhttpsendrequest", 14, "WinHTTP request API"),
         new Marker("wss://", 12, "WebSocket URL"),
-        new Marker("authorization:", 8, "Authorization header"),
-        new Marker("application/json", 5, "JSON web/API payload marker"),
-        new Marker("/api/", 6, "API path"),
-        new Marker("/login", 8, "Login endpoint/path"),
-        new Marker("/auth", 8, "Authentication endpoint/path"),
-        new Marker("/match", 7, "Matchmaking endpoint/path"),
-        new Marker("/lobby", 7, "Lobby endpoint/path")
+        new Marker("authorization:", 6, "Authorization-like header marker"),
+        new Marker("application/json", 2, "JSON content-type/payload marker"),
+        new Marker("/api/", 3, "API-like path marker"),
+        new Marker("/login", 4, "Login-like path/string marker"),
+        new Marker("/auth", 4, "Authentication-like path/string marker"),
+        new Marker("/match", 3, "Match-like path/string marker"),
+        new Marker("/lobby", 3, "Lobby-like path/string marker")
     };
 
     private static final FilenameMarker[] FILE_NAME_MARKERS = {
@@ -76,6 +76,24 @@ public class GameFolderScanner {
         new FilenameMarker("eos", 10, "filename suggests Epic Online Services"),
         new FilenameMarker("uplay", 10, "filename suggests Ubisoft/Uplay integration"),
         new FilenameMarker("ubisoft", 10, "filename suggests Ubisoft integration")
+    };
+
+    private static final RoleHint[] ROLE_HINTS = {
+        new RoleHint("blizzarderror", -35, "likely crash/error reporting helper"),
+        new RoleHint("crashreport", -35, "likely crash reporting helper"),
+        new RoleHint("crashhandler", -35, "likely crash reporting helper"),
+        new RoleHint("crashpad", -35, "likely crash reporting helper"),
+        new RoleHint("browser", -15, "likely embedded browser/web UI helper"),
+        new RoleHint("cef", -15, "likely embedded Chromium/web UI helper"),
+        new RoleHint("vivox", -22, "likely voice/chat SDK"),
+        new RoleHint("steam_api", -12, "platform SDK/helper"),
+        new RoleHint("nvngx", -45, "graphics/DLSS module"),
+        new RoleHint("dlss", -45, "graphics/DLSS module"),
+        new RoleHint("d3d", -35, "graphics module"),
+        new RoleHint("dxgi", -35, "graphics module"),
+        new RoleHint("fmod", -30, "audio middleware"),
+        new RoleHint("wwise", -30, "audio middleware"),
+        new RoleHint("xaudio", -30, "audio module")
     };
 
     public GameFolderReport scan(Program program, Consumer<String> progress) {
@@ -162,8 +180,11 @@ public class GameFolderScanner {
 
         String note =
             "Raw folder scan only: files are not executed. It searches executable/DLL bytes and " +
-            "filenames for networking/online-service indicators. High-ranked modules should be " +
-            "imported into Ghidra for deeper xref/decompiler analysis.";
+            "filenames for networking/online-service indicators, then applies light filename-based " +
+            "role hints so obvious crash, browser, graphics, voice, and platform helpers do not " +
+            "automatically outrank likely game/loader modules. Scores prioritize what to inspect; " +
+            "they do not prove a module's role. High-ranked modules should be imported into Ghidra " +
+            "for deeper xref/decompiler analysis.";
 
         return new GameFolderReport(
             root.getAbsolutePath(),
@@ -185,6 +206,13 @@ public class GameFolderScanner {
             if (lowerName.contains(marker.value())) {
                 score += marker.weight();
                 addEvidence(evidence, marker.description());
+            }
+        }
+
+        for (RoleHint hint : ROLE_HINTS) {
+            if (lowerName.contains(hint.value())) {
+                score += hint.scoreAdjustment();
+                addEvidence(evidence, hint.description());
             }
         }
 
@@ -259,7 +287,7 @@ public class GameFolderScanner {
             addEvidence(evidence, "read error: " + e.getMessage());
         }
 
-        return new ModuleScan(score, List.copyOf(evidence), bytesScanned, truncated);
+        return new ModuleScan(Math.max(0, score), List.copyOf(evidence), bytesScanned, truncated);
     }
 
     private static boolean isExecutableModule(Path path) {
@@ -318,6 +346,9 @@ public class GameFolderScanner {
     }
 
     private record FilenameMarker(String value, int weight, String description) {
+    }
+
+    private record RoleHint(String value, int scoreAdjustment, String description) {
     }
 
     private record ModuleScan(
