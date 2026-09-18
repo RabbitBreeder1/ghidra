@@ -53,33 +53,41 @@ login/authentication, account/profile, version checks, matchmaking, lobbies, ses
 telemetry, content/config downloads, and game-state networking.
 
 Analyze only the evidence supplied by Ghidra. Do not invent server behavior.
-Classify the function's likely preservation relevance and explain why.
+Absence of evidence is UNKNOWN, not evidence for a "likely" architecture.
+Do not infer TCP, UDP, HTTP, HTTPS, authentication, telemetry, matchmaking, or any other service
+unless the supplied function/code/API/string/call evidence directly supports that inference.
 
 Return a concise response with:
-ROLE: likely role
-RELEVANCE: HIGH, MEDIUM, LOW, or UNRELATED
-EVIDENCE: concrete code/API/string/call evidence
+ROLE: evidence-supported role, or UNKNOWN
+RELEVANCE: HIGH, MEDIUM, LOW, UNRELATED, or UNKNOWN
+EVIDENCE: concrete code/API/string/call evidence only; write NONE if there is none
 NEXT: one or two specific Ghidra investigation steps
 """;
 
     private static final String FINAL_SYSTEM_PROMPT = """
 You are producing a preservation research report for an old online game client.
-Using only the supplied static-analysis evidence and function assessments, build a concise map of
-how the client likely talks to external services.
+Using only the supplied static-analysis evidence and function assessments, build a concise
+preservation report.
 
-Focus on:
-- networking technology and APIs
-- server/endpoints and how they are discovered
-- authentication/login
-- version/update checks
-- matchmaking/lobby/session services
-- real-time game networking
-- telemetry or unrelated web traffic
-- dynamically resolved networking APIs
-- the most important functions to investigate next
+STRICT EVIDENCE RULES:
+- Never fill a missing category with what an online game would "probably" or "likely" use.
+- If the evidence does not establish a protocol, API, endpoint, service, or function role, write UNKNOWN.
+- Do not infer Winsock, TCP, UDP, HTTP, HTTPS, TLS, authentication, matchmaking, telemetry,
+  version checking, or session management merely because the program is a game.
+- A generic LoadLibrary/GetProcAddress call is NOT networking evidence by itself.
+- Separate CONFIRMED EVIDENCE from EVIDENCE-BACKED HYPOTHESES.
+- A hypothesis is allowed only when you cite the exact supplied clue that supports it.
+- If there are no network findings and no preservation-relevant function assessments, explicitly
+  state that static analysis has not yet identified the networking implementation.
 
-Clearly distinguish confirmed evidence from hypotheses. Do not claim a server endpoint exists unless
-the supplied evidence supports it. The objective is interoperability research and preservation.
+Report:
+1. CONFIRMED EVIDENCE
+2. EVIDENCE-BACKED HYPOTHESES
+3. UNKNOWN / NOT YET ESTABLISHED
+4. FUNCTIONS TO INVESTIGATE NEXT
+5. NEXT PRESERVATION STEPS
+
+The objective is interoperability research and preservation, not speculation.
 """;
 
     private final PluginTool tool;
@@ -122,7 +130,9 @@ the supplied evidence supports it. The objective is interoperability research an
         expandOneHop(candidates);
 
         List<Candidate> ranked = candidates.values().stream()
-            .filter(candidate -> candidate.function() != null && !candidate.function().isExternal())
+            .filter(candidate -> candidate.function() != null &&
+                !candidate.function().isExternal() &&
+                candidate.score() >= 5)
             .sorted(Comparator.comparingInt(Candidate::score).reversed())
             .limit(MAX_AI_FUNCTIONS)
             .toList();
@@ -150,8 +160,15 @@ the supplied evidence supports it. The objective is interoperability research an
         }
 
         update(progress, "Building preservation map...");
-        String finalPrompt = buildFinalPrompt(program, protection, network, assessments);
-        String synthesis = ollama.complete(baseUrl, model, FINAL_SYSTEM_PROMPT, finalPrompt);
+        String synthesis;
+
+        if ((network == null || !network.hasFindings()) && assessments.isEmpty()) {
+            synthesis = buildNoEvidenceSynthesis(program, protection, network);
+        }
+        else {
+            String finalPrompt = buildFinalPrompt(program, protection, network, assessments);
+            synthesis = ollama.complete(baseUrl, model, FINAL_SYSTEM_PROMPT, finalPrompt);
+        }
 
         String note =
             "One-button analysis is intentionally bounded to the top " + MAX_AI_FUNCTIONS +
@@ -236,8 +253,11 @@ the supplied evidence supports it. The objective is interoperability research an
                         ignored -> new Candidate(function)
                     );
 
-                    candidate.addScore(10);
-                    candidate.addEvidence("Dynamic API resolver: " + library + "!" + label);
+                    candidate.addScore(1);
+                    candidate.addEvidence(
+                        "Generic dynamic API resolver (not networking evidence by itself): " +
+                        library + "!" + label
+                    );
                 }
             }
         }
@@ -441,6 +461,51 @@ the supplied evidence supports it. The objective is interoperability research an
                 .append(function.isExternal() ? " [external]" : "")
                 .append('\n');
         }
+    }
+
+    private String buildNoEvidenceSynthesis(
+            Program program,
+            ProtectionReport protection,
+            NetworkReport network) {
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("CONFIRMED EVIDENCE\n");
+        sb.append("- Static analysis did not identify a recognized network API, server endpoint, ")
+            .append("hostname/IP, or preservation-relevant network function in this program.\n");
+
+        if (protection != null && protection.hasFindings()) {
+            sb.append("- Protection/packing indicators were detected; see the protection scan.\n");
+        }
+
+        sb.append("\nEVIDENCE-BACKED HYPOTHESES\n");
+        sb.append("- NONE. There is not enough static evidence to infer the networking stack.\n");
+
+        sb.append("\nUNKNOWN / NOT YET ESTABLISHED\n");
+        sb.append("- Network protocol: UNKNOWN\n");
+        sb.append("- Server discovery method: UNKNOWN\n");
+        sb.append("- Authentication/login implementation: UNKNOWN\n");
+        sb.append("- Matchmaking/lobby/session implementation: UNKNOWN\n");
+        sb.append("- Real-time game networking implementation: UNKNOWN\n");
+        sb.append("- Telemetry/update services: UNKNOWN\n");
+
+        sb.append("\nFUNCTIONS TO INVESTIGATE NEXT\n");
+        sb.append("- No function has yet been tied to networking by static evidence.\n");
+
+        sb.append("\nNEXT PRESERVATION STEPS\n");
+        sb.append("- Scan adjacent game DLLs/modules, because networking may live outside this EXE.\n");
+        sb.append("- Look for dynamically resolved networking API names and loader paths.\n");
+        sb.append("- If static evidence remains absent, use an offline-safe dynamic trace to observe ")
+            .append("DNS/API/socket activity without allowing live service access.\n");
+
+        if (network != null) {
+            sb.append("- Current network scan inspected ")
+                .append(network.externalSymbolsScanned())
+                .append(" external symbols and ")
+                .append(network.definedStringsScanned())
+                .append(" defined strings.\n");
+        }
+
+        return sb.toString().trim();
     }
 
     private String buildFinalPrompt(
