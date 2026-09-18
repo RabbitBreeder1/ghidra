@@ -18,16 +18,20 @@ public class LocalAIPlugin extends ProgramPlugin {
     private final ContextCollector contextCollector;
     private final ProtectionDetector protectionDetector;
     private final NetworkCommunicationScanner networkScanner;
+    private final PreservationAnalyzer preservationAnalyzer;
     private final LocalAIProvider provider;
 
     private volatile ProtectionReport protectionReport = ProtectionReport.notScanned();
     private volatile NetworkReport networkReport = NetworkReport.notScanned();
+    private volatile PreservationAnalysisReport preservationReport =
+        PreservationAnalysisReport.notRun();
 
     public LocalAIPlugin(PluginTool tool) {
         super(tool);
         contextCollector = new ContextCollector(tool);
         protectionDetector = new ProtectionDetector();
         networkScanner = new NetworkCommunicationScanner();
+        preservationAnalyzer = new PreservationAnalyzer(tool);
         provider = new LocalAIProvider(tool, getName(), this);
     }
 
@@ -38,7 +42,8 @@ public class LocalAIPlugin extends ProgramPlugin {
             program,
             location,
             protectionReport,
-            networkReport
+            networkReport,
+            preservationReport
         );
     }
 
@@ -51,6 +56,26 @@ public class LocalAIPlugin extends ProgramPlugin {
     public NetworkReport scanNetworkCommunication() {
         NetworkReport report = networkScanner.scan(currentProgram);
         networkReport = report;
+        return report;
+    }
+
+    public PreservationAnalysisReport runPreservationAnalysis(
+            OllamaClient ollama,
+            String baseUrl,
+            String model,
+            java.util.function.Consumer<String> progress) throws Exception {
+
+        PreservationAnalysisReport report = preservationAnalyzer.analyze(
+            currentProgram,
+            ollama,
+            baseUrl,
+            model,
+            progress
+        );
+
+        preservationReport = report;
+        protectionReport = report.protectionReport();
+        networkReport = report.networkReport();
         return report;
     }
 
@@ -73,6 +98,7 @@ public class LocalAIPlugin extends ProgramPlugin {
     private void resetProgramScans() {
         protectionReport = ProtectionReport.notScanned();
         networkReport = NetworkReport.notScanned();
+        preservationReport = PreservationAnalysisReport.notRun();
     }
 
     @Override
