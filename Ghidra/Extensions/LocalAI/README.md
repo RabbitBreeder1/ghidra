@@ -49,8 +49,17 @@ locally hosted Ollama model.
   about likely login, matchmaking, telemetry, HTTP/API, socket, and server-connection code.
 - Static network scanning does not capture runtime DNS, endpoints decrypted/assembled at runtime,
   dynamically loaded APIs, or custom encrypted protocols; those require dynamic tracing.
+- **Analyze Game Folder**:
+  - starts from the loaded program's executable directory
+  - scans nearby `.exe` and `.dll` files without executing them
+  - ranks modules using networking/online-service filenames and raw ASCII/UTF-16LE indicators
+  - recognizes indicators for Winsock, WinHTTP/WinINet, libcurl/OpenSSL, Steam Networking,
+    Epic Online Services, RakNet, ENet, GameSpy, DNS/address resolution, server browsing,
+    HTTP(S)/WebSocket URLs, and common login/auth/match/lobby paths
+  - reports the strongest modules to import into Ghidra next
+  - feeds the ranked module report into later LocalAI chat context.
 - **Preservation Analysis (AI)** one-button workflow:
-  - automatically runs DRM/protector and network/server discovery
+  - automatically runs game-folder module analysis, DRM/protector scanning, and network/server discovery
   - finds functions referenced by network APIs/endpoints
   - looks for dynamic resolution through LoadLibrary/GetProcAddress/LdrLoadDll
   - searches for hidden networking DLL/API-name strings
