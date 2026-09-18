@@ -247,6 +247,11 @@ public class NetworkCommunicationScanner {
         Matcher matcher = pattern.matcher(sourceText);
         while (matcher.find()) {
             String value = trimPunctuation(matcher.group());
+
+            if ("Endpoint URL".equals(kind) && !isUsefulUrl(value, sourceText)) {
+                continue;
+            }
+
             add(
                 kind,
                 value,
@@ -327,12 +332,16 @@ public class NetworkCommunicationScanner {
             value.startsWith("delete /");
     }
 
-    private static boolean isUsefulDomain(String domain) {
+    static boolean isUsefulDomain(String domain) {
         if (domain == null || domain.length() < 4 || domain.length() > 253) {
             return false;
         }
 
         String lower = domain.toLowerCase(Locale.ROOT);
+
+        if (isKnownSchemaHost(lower)) {
+            return false;
+        }
 
         return !(lower.endsWith(".dll") ||
             lower.endsWith(".exe") ||
@@ -349,6 +358,44 @@ public class NetworkCommunicationScanner {
             lower.endsWith(".png") ||
             lower.endsWith(".jpg") ||
             lower.endsWith(".dds"));
+    }
+
+    static boolean isUsefulUrl(String url, String sourceText) {
+        if (url == null || url.isBlank()) {
+            return false;
+        }
+
+        String lower = url.toLowerCase(Locale.ROOT);
+        String source = sourceText == null ? "" : sourceText.toLowerCase(Locale.ROOT);
+
+        if (lower.startsWith("http://schemas.microsoft.com/") ||
+            lower.startsWith("https://schemas.microsoft.com/") ||
+            lower.startsWith("http://www.w3.org/") ||
+            lower.startsWith("https://www.w3.org/") ||
+            lower.startsWith("http://schemas.xmlsoap.org/") ||
+            lower.startsWith("https://schemas.xmlsoap.org/") ||
+            lower.startsWith("http://schemas.openxmlformats.org/") ||
+            lower.startsWith("https://schemas.openxmlformats.org/")) {
+            return false;
+        }
+
+        if ((source.contains("<?xml") || source.contains("xmlns=") || source.contains("urn:")) &&
+            (lower.contains("/schema") || lower.contains("/schemas/") ||
+             lower.contains("windowssettings"))) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static boolean isKnownSchemaHost(String host) {
+        return host.equals("schemas.microsoft.com") ||
+            host.equals("www.w3.org") ||
+            host.equals("schemas.xmlsoap.org") ||
+            host.equals("schemas.openxmlformats.org") ||
+            host.equals("purl.org") ||
+            host.equals("www.oasis-open.org") ||
+            host.equals("www.ecma-international.org");
     }
 
     private static String trimPunctuation(String value) {
