@@ -39,6 +39,16 @@ locally hosted Ollama model.
   Arxan, SecuROM, SafeDisc, StarForce, Ubisoft Connect/Uplay, and UPX.
 - DRM/protector findings are added to subsequent LocalAI prompt context.
 - Protection detection is evidence-based and heuristic; it does not attempt to bypass or disable DRM.
+- One-click **Network / Server Scan** for preservation-oriented analysis:
+  - recognized networking imports/APIs (Winsock, WinHTTP, WinINet, libcurl, OpenSSL/TLS,
+    WebSocket, Steam Networking, Epic Online Services, RakNet, ENet)
+  - URLs, hostnames/domains, and IPv4 addresses from defined strings
+  - protocol/request markers such as HTTP headers, JSON, gRPC, Socket.IO, and API paths
+  - xrefs from networking APIs and endpoint strings back to local Ghidra functions
+- Network scan findings are added to subsequent LocalAI prompt context so the model can reason
+  about likely login, matchmaking, telemetry, HTTP/API, socket, and server-connection code.
+- Static network scanning does not capture runtime DNS, endpoints decrypted/assembled at runtime,
+  dynamically loaded APIs, or custom encrypted protocols; those require dynamic tracing.
 
 ## Default model
 
@@ -90,7 +100,7 @@ Install Ollama separately and make sure its local service is running.
 Pull the default model:
 
 ```powershell
-ollama pull qwen2.5-coder:7b
+ollama pull qwen3-coder:30b
 ```
 
 The extension defaults to:
