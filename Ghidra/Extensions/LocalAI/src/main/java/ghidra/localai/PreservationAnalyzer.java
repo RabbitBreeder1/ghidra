@@ -103,12 +103,14 @@ The objective is interoperability research and preservation, not speculation.
             OllamaClient ollama,
             String baseUrl,
             String model,
+            GameFolderReport gameFolder,
             Consumer<String> progress) throws Exception {
 
         if (program == null || program.isClosed()) {
             return new PreservationAnalysisReport(
                 ProtectionReport.noProgram(),
                 NetworkReport.noProgram(),
+                GameFolderReport.unavailable("No active program is available."),
                 List.of(),
                 "",
                 "No active program is available."
@@ -162,11 +164,16 @@ The objective is interoperability research and preservation, not speculation.
         update(progress, "Building preservation map...");
         String synthesis;
 
-        if ((network == null || !network.hasFindings()) && assessments.isEmpty()) {
-            synthesis = buildNoEvidenceSynthesis(program, protection, network);
+        boolean folderHasCandidates = gameFolder != null && gameFolder.hasCandidates();
+
+        if ((network == null || !network.hasFindings()) &&
+            assessments.isEmpty() &&
+            !folderHasCandidates) {
+            synthesis = buildNoEvidenceSynthesis(program, protection, network, gameFolder);
         }
         else {
-            String finalPrompt = buildFinalPrompt(program, protection, network, assessments);
+            String finalPrompt =
+                buildFinalPrompt(program, protection, network, gameFolder, assessments);
             synthesis = ollama.complete(baseUrl, model, FINAL_SYSTEM_PROMPT, finalPrompt);
         }
 
@@ -179,6 +186,7 @@ The objective is interoperability research and preservation, not speculation.
         return new PreservationAnalysisReport(
             protection,
             network,
+            gameFolder == null ? GameFolderReport.notScanned() : gameFolder,
             List.copyOf(assessments),
             synthesis,
             note
@@ -466,7 +474,8 @@ The objective is interoperability research and preservation, not speculation.
     private String buildNoEvidenceSynthesis(
             Program program,
             ProtectionReport protection,
-            NetworkReport network) {
+            NetworkReport network,
+            GameFolderReport gameFolder) {
 
         StringBuilder sb = new StringBuilder();
         sb.append("CONFIRMED EVIDENCE\n");
@@ -492,7 +501,10 @@ The objective is interoperability research and preservation, not speculation.
         sb.append("- No function has yet been tied to networking by static evidence.\n");
 
         sb.append("\nNEXT PRESERVATION STEPS\n");
-        sb.append("- Scan adjacent game DLLs/modules, because networking may live outside this EXE.\n");
+        if (gameFolder == null || !gameFolder.hasCandidates()) {
+            sb.append("- No adjacent EXE/DLL module was strongly tied to networking by the raw folder scan.\n");
+        }
+        sb.append("- Import the strongest adjacent module candidates into Ghidra if the folder scan identifies any.\n");
         sb.append("- Look for dynamically resolved networking API names and loader paths.\n");
         sb.append("- If static evidence remains absent, use an offline-safe dynamic trace to observe ")
             .append("DNS/API/socket activity without allowing live service access.\n");
@@ -512,6 +524,7 @@ The objective is interoperability research and preservation, not speculation.
             Program program,
             ProtectionReport protection,
             NetworkReport network,
+            GameFolderReport gameFolder,
             List<PreservationFunctionAssessment> assessments) {
 
         StringBuilder sb = new StringBuilder();
@@ -526,6 +539,10 @@ The objective is interoperability research and preservation, not speculation.
 
         sb.append("NETWORK FINDINGS\n")
             .append(network == null ? "<none>" : network.toPromptText())
+            .append("\n\n");
+
+        sb.append("GAME FOLDER MODULE FINDINGS\n")
+            .append(gameFolder == null ? "<not scanned>" : gameFolder.toPromptText())
             .append("\n\n");
 
         sb.append("FUNCTION ASSESSMENTS\n");
