@@ -4,21 +4,26 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
+import java.util.stream.Stream;
 
 import ghidra.program.model.listing.Program;
 
 public class OfflineTraceFirewall {
+    private static final int MAX_EXECUTABLES = 200;
+    private static final int MAX_DEPTH = 3;
 
     public OfflineTraceFirewallReport enable(Program program) {
-        return change(program, true);
+        return changeGameFolder(program, true);
     }
 
     public OfflineTraceFirewallReport disable(Program program) {
-        return change(program, false);
+        return changeGameFolder(program, false);
     }
 
-    private OfflineTraceFirewallReport change(Program program, boolean enable) {
+    private OfflineTraceFirewallReport changeGameFolder(Program program, boolean enable) {
         if (program == null || program.isClosed()) {
             return failure(enable, null, null, null, "No active program is available.");
         }
@@ -39,26 +44,39 @@ public class OfflineTraceFirewall {
                 "The loaded program does not expose an executable filesystem path.");
         }
 
-        Path executable = Path.of(executablePath);
+        Path executable = Path.of(executablePath).toAbsolutePath().normalize();
         if (!Files.isRegularFile(executable)) {
             return failure(enable, executablePath, null, null,
                 "Executable path does not exist on disk.");
         }
 
-        String id = Integer.toUnsignedString(
-            executablePath.toLowerCase(Locale.ROOT).hashCode(),
+        Path root = executable.getParent();
+        if (root == null || !Files.isDirectory(root)) {
+            return failure(enable, executablePath, null, null,
+                "Could not resolve the game folder.");
+        }
+
+        String folderId = Integer.toUnsignedString(
+            root.toString().toLowerCase(Locale.ROOT).hashCode(),
             16
         );
-        String outbound = "Ghidra LocalAI Offline Trace OUT " + id;
-        String inbound = "Ghidra LocalAI Offline Trace IN " + id;
+        String prefix = "Ghidra LocalAI SafeTrace " + folderId;
+        String outbound = prefix + " OUT *";
+        String inbound = prefix + " IN *";
 
         try {
-            Path script = writeElevationScript(
-                executablePath,
-                outbound,
-                inbound,
-                enable
-            );
+            List<Path> executables = enable ? enumerateExecutables(root) : List.of();
+            if (enable && executables.isEmpty()) {
+                return failure(
+                    true,
+                    executablePath,
+                    outbound,
+                    inbound,
+                    "No executable files were found in the game folder."
+                );
+            }
+
+            Path script = writeElevationScript(root, prefix, executables, enable);
 
             int exitCode = runElevatedPowerShell(script);
             try {
@@ -74,27 +92,31 @@ public class OfflineTraceFirewall {
                     executablePath,
                     outbound,
                     inbound,
-                    "Elevated PowerShell returned exit code " + exitCode +
-                        ". The UAC prompt may have been cancelled."
+                    "Elevated firewall script returned exit code " + exitCode +
+                        ". The UAC prompt may have been cancelled or rule verification failed."
                 );
             }
+
+            String message = enable
+                ? "Verified inbound/outbound Windows Firewall block rules for " +
+                    executables.size() + " EXE(s) under " + root +
+                    ". This safety gate does not execute the game. DLLs loaded inside those " +
+                    "blocked processes inherit the process network block."
+                : "Removed the LocalAI SafeTrace firewall rules for game folder " + root + ".";
 
             return new OfflineTraceFirewallReport(
                 true,
                 enable,
-                executablePath,
+                root.toString(),
                 outbound,
                 inbound,
-                enable
-                    ? "Inbound and outbound Windows Firewall block rules were created for this executable. " +
-                        "This does not automatically block separate launcher/helper processes."
-                    : "LocalAI offline-trace firewall rules were removed for this executable."
+                message
             );
         }
         catch (Exception e) {
             return failure(
                 enable,
-                executablePath,
+                root.toString(),
                 outbound,
                 inbound,
                 e.getMessage()
@@ -102,42 +124,65 @@ public class OfflineTraceFirewall {
         }
     }
 
+    private static List<Path> enumerateExecutables(Path root) throws IOException {
+        List<Path> executables = new ArrayList<>();
+
+        try (Stream<Path> stream = Files.walk(root, MAX_DEPTH)) {
+            stream.filter(Files::isRegularFile)
+                .filter(path -> path.getFileName().toString()
+                    .toLowerCase(Locale.ROOT).endsWith(".exe"))
+                .limit(MAX_EXECUTABLES)
+                .forEach(path -> executables.add(path.toAbsolutePath().normalize()));
+        }
+
+        return List.copyOf(executables);
+    }
+
     private static Path writeElevationScript(
-            String executablePath,
-            String outbound,
-            String inbound,
+            Path root,
+            String prefix,
+            List<Path> executables,
             boolean enable) throws IOException {
 
-        String exe = psSingleQuoted(executablePath);
-        String out = psSingleQuoted(outbound);
-        String in = psSingleQuoted(inbound);
+        StringBuilder body = new StringBuilder();
+        body.append("$ErrorActionPreference = 'Stop'\r\n");
+        body.append("$prefix = '").append(psSingleQuoted(prefix)).append("'\r\n");
+        body.append("Get-NetFirewallRule -DisplayName ($prefix + '*') ")
+            .append("-ErrorAction SilentlyContinue | Remove-NetFirewallRule\r\n");
 
-        String body;
         if (enable) {
-            body =
-                "$ErrorActionPreference = 'Stop'\r\n" +
-                "Get-NetFirewallRule -DisplayName '" + out +
-                    "' -ErrorAction SilentlyContinue | Remove-NetFirewallRule\r\n" +
-                "Get-NetFirewallRule -DisplayName '" + in +
-                    "' -ErrorAction SilentlyContinue | Remove-NetFirewallRule\r\n" +
-                "New-NetFirewallRule -DisplayName '" + out +
-                    "' -Direction Outbound -Program '" + exe +
-                    "' -Action Block -Enabled True -Profile Any | Out-Null\r\n" +
-                "New-NetFirewallRule -DisplayName '" + in +
-                    "' -Direction Inbound -Program '" + exe +
-                    "' -Action Block -Enabled True -Profile Any | Out-Null\r\n";
+            body.append("$programs = @(\r\n");
+            for (Path executable : executables) {
+                body.append("  '")
+                    .append(psSingleQuoted(executable.toString()))
+                    .append("',\r\n");
+            }
+            body.append(")\r\n");
+            body.append("$i = 0\r\n");
+            body.append("foreach ($program in $programs) {\r\n");
+            body.append("  New-NetFirewallRule -DisplayName ($prefix + ' OUT ' + $i) ")
+                .append("-Direction Outbound -Program $program -Action Block -Enabled True ")
+                .append("-Profile Any | Out-Null\r\n");
+            body.append("  New-NetFirewallRule -DisplayName ($prefix + ' IN ' + $i) ")
+                .append("-Direction Inbound -Program $program -Action Block -Enabled True ")
+                .append("-Profile Any | Out-Null\r\n");
+            body.append("  $i++\r\n");
+            body.append("}\r\n");
+            body.append("$expected = $programs.Count * 2\r\n");
+            body.append("$actual = @(Get-NetFirewallRule -DisplayName ($prefix + '*') ")
+                .append("-ErrorAction SilentlyContinue).Count\r\n");
+            body.append("if ($actual -lt $expected) { exit 31 }\r\n");
         }
         else {
-            body =
-                "$ErrorActionPreference = 'Stop'\r\n" +
-                "Get-NetFirewallRule -DisplayName '" + out +
-                    "' -ErrorAction SilentlyContinue | Remove-NetFirewallRule\r\n" +
-                "Get-NetFirewallRule -DisplayName '" + in +
-                    "' -ErrorAction SilentlyContinue | Remove-NetFirewallRule\r\n";
+            body.append("$remaining = @(Get-NetFirewallRule -DisplayName ($prefix + '*') ")
+                .append("-ErrorAction SilentlyContinue).Count\r\n");
+            body.append("if ($remaining -ne 0) { exit 32 }\r\n");
         }
 
-        Path script = Files.createTempFile("ghidra-localai-firewall-", ".ps1");
-        Files.writeString(script, body, StandardCharsets.UTF_8);
+        body.append("exit 0\r\n");
+
+        Path script = Files.createTempFile("ghidra-localai-safetrace-", ".ps1");
+        Files.writeString(script, body.toString(), StandardCharsets.UTF_8);
         return script;
     }
 
@@ -147,9 +192,9 @@ public class OfflineTraceFirewall {
         String scriptPath = psSingleQuoted(script.toAbsolutePath().toString());
 
         String command =
-            "Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait " +
+            "$p = Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru " +
             "-ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File','" +
-            scriptPath + "')";
+            scriptPath + "'); exit $p.ExitCode";
 
         Process process = new ProcessBuilder(
             "powershell.exe",
