@@ -8,9 +8,20 @@ public record GameEvidenceHit(
         String mappedAddress,
         String referencingFunctions) {
 
+    public String evidenceTier() {
+        if (referencingFunctions != null && !referencingFunctions.isBlank()) {
+            return "GHIDRA_XREF_FUNCTION";
+        }
+        if (mappedAddress != null && !mappedAddress.isBlank()) {
+            return "GHIDRA_MAPPED_NO_XREF";
+        }
+        return "RAW_FILE";
+    }
+
     public String toDisplayText() {
         StringBuilder sb = new StringBuilder();
-        sb.append(description)
+        sb.append('[').append(evidenceTier()).append("] ")
+            .append(description)
             .append(": ")
             .append(marker);
 
