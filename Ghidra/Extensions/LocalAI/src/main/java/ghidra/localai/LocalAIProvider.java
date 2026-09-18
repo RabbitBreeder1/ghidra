@@ -51,6 +51,7 @@ public class LocalAIProvider extends ComponentProviderAdapter {
     private JButton sendButton;
     private JButton checkButton;
     private JButton protectionScanButton;
+    private JButton networkScanButton;
     private JButton clearButton;
     private volatile boolean busy;
 
@@ -93,12 +94,13 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         mainPanel = new JPanel(new BorderLayout(6, 6));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
 
-        JPanel settings = new JPanel(new GridLayout(5, 2, 5, 4));
+        JPanel settings = new JPanel(new GridLayout(6, 2, 5, 4));
         urlField = new JTextField(DEFAULT_URL);
         modelField = new JTextField(DEFAULT_MODEL);
         allowEdits = new JCheckBox("Allow AI edits (undoable)", true);
         checkButton = new JButton("Check Ollama");
         protectionScanButton = new JButton("DRM / Protector Scan");
+        networkScanButton = new JButton("Network / Server Scan");
 
         settings.add(new JLabel("Ollama URL (loopback only)"));
         settings.add(urlField);
@@ -106,8 +108,10 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         settings.add(modelField);
         settings.add(allowEdits);
         settings.add(checkButton);
-        settings.add(new JLabel("Static check"));
+        settings.add(new JLabel("Static protection check"));
         settings.add(protectionScanButton);
+        settings.add(new JLabel("Game preservation"));
+        settings.add(networkScanButton);
 
         statusLabel = new JLabel("Status: not checked");
         contextLabel = new JLabel("Context: no active program");
@@ -147,6 +151,7 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         clearButton.addActionListener(e -> clearChat());
         checkButton.addActionListener(e -> checkOllama());
         protectionScanButton.addActionListener(e -> scanProtection());
+        networkScanButton.addActionListener(e -> scanNetworkCommunication());
 
         input.getInputMap().put(
             KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.CTRL_DOWN_MASK),
@@ -213,6 +218,29 @@ public class LocalAIProvider extends ComponentProviderAdapter {
                 }
 
                 statusLabel.setText("Status: DRM scan complete");
+                appendSystem(report.toDisplayText());
+            }));
+    }
+
+    private void scanNetworkCommunication() {
+        if (busy) {
+            return;
+        }
+
+        setBusy(true);
+        statusLabel.setText("Status: scanning network/server communication...");
+
+        CompletableFuture.supplyAsync(plugin::scanNetworkCommunication)
+            .whenComplete((report, error) -> SwingUtilities.invokeLater(() -> {
+                setBusy(false);
+
+                if (error != null) {
+                    statusLabel.setText("Status: network scan failed");
+                    appendSystem("Network/server scan failed: " + rootMessage(error));
+                    return;
+                }
+
+                statusLabel.setText("Status: network scan complete");
                 appendSystem(report.toDisplayText());
             }));
     }
@@ -295,6 +323,7 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         sendButton.setEnabled(!value);
         checkButton.setEnabled(!value);
         protectionScanButton.setEnabled(!value);
+        networkScanButton.setEnabled(!value);
     }
 
     private void appendUser(String text) {
