@@ -1,0 +1,125 @@
+# Ghidra LocalAI
+
+A deliberately simple Ghidra extension that connects the current CodeBrowser session to a
+locally hosted Ollama model.
+
+## Current features
+
+- Dockable Swing chat panel.
+- Ollama `/api/chat` support.
+- Loopback-only model endpoint by default and by enforcement:
+  - `127.0.0.1`
+  - `localhost`
+  - `::1`
+- Carries the last 12 user/assistant chat messages into each request.
+- Automatically attaches context from the current Ghidra cursor/function:
+  - program name
+  - executable format
+  - language
+  - cursor address
+  - current function name and entry address
+  - current prototype
+  - current function comment
+  - current EOL comment
+  - current function's decompiled C
+- Decompiled C is capped at 24,000 characters per request.
+- AI-requested edits are only accepted when the model emits the LocalAI action protocol.
+- Supported edits:
+  - rename the current function
+  - set the current function comment
+  - set an EOL comment at the captured cursor address
+- Function renames use Ghidra's `SourceType.AI`.
+- Edit batches are Ghidra transactions. If one action fails, the entire AI edit batch rolls back.
+- The UI has an `Allow AI edits` checkbox. Disable it for read-only chat.
+
+## Default model
+
+The UI defaults to:
+
+```
+qwen2.5-coder:7b
+```
+
+You can type any installed Ollama model name into the Model field.
+
+## Build from this repository
+
+This branch currently targets the Ghidra source version in this repository
+(Ghidra 12.3 DEV / JDK 25).
+
+From the repository root:
+
+### Windows
+
+```powershell
+.\gradlew.bat -I gradle\support\fetchDependencies.gradle -DhideDownloadProgress -DnoEclipse
+.\gradlew.bat buildGhidra --parallel
+```
+
+The finished Ghidra distribution is placed under:
+
+```
+build\dist\
+```
+
+The LocalAI extension archive is bundled under `Extensions/Ghidra` inside the resulting
+Ghidra distribution.
+
+## Enable LocalAI in Ghidra
+
+1. Start the newly built Ghidra.
+2. From the Project window choose **File -> Install Extensions...**
+3. Enable **LocalAI** and restart Ghidra if requested.
+4. Open a program in CodeBrowser.
+5. Choose **File -> Configure...**
+6. Enable the **LocalAIPlugin** if it is not already enabled.
+7. The **Local AI** component appears as a dockable window.
+
+## Ollama
+
+Install Ollama separately and make sure its local service is running.
+
+Pull the default model:
+
+```powershell
+ollama pull qwen2.5-coder:7b
+```
+
+The extension defaults to:
+
+```
+http://127.0.0.1:11434
+```
+
+Use **Check Ollama** in the Local AI panel before the first chat request.
+
+## Safe test program
+
+`examples/tiny_numbers.c` is provided under CC0-1.0 specifically for testing this extension.
+
+Compile it without debug information, import the resulting executable into Ghidra, run normal
+auto-analysis, put the cursor inside one of the small helper functions, and ask:
+
+```
+What does the current function do? Do not modify anything.
+```
+
+Then test edits:
+
+```
+Rename the current function to clamp_value and add a short function comment describing what it does.
+```
+
+Ghidra should report the rename/comment in the LocalAI transcript. The changes can also be undone
+using Ghidra's normal Undo command.
+
+## Important behavior
+
+The model never receives the entire binary. The first version sends the current decompiled
+function plus the metadata listed above.
+
+The system prompt treats decompiled code, symbols, comments, strings, and other program content as
+untrusted data rather than model instructions.
+
+This first version intentionally rejects non-loopback Ollama hosts so analysis text cannot be sent
+to a remote model endpoint by mistake.
