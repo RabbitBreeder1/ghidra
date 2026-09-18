@@ -17,20 +17,29 @@ import ghidra.program.util.ProgramLocation;
 public class LocalAIPlugin extends ProgramPlugin {
     private final ContextCollector contextCollector;
     private final ProtectionDetector protectionDetector;
+    private final NetworkCommunicationScanner networkScanner;
     private final LocalAIProvider provider;
+
     private volatile ProtectionReport protectionReport = ProtectionReport.notScanned();
+    private volatile NetworkReport networkReport = NetworkReport.notScanned();
 
     public LocalAIPlugin(PluginTool tool) {
         super(tool);
         contextCollector = new ContextCollector(tool);
         protectionDetector = new ProtectionDetector();
+        networkScanner = new NetworkCommunicationScanner();
         provider = new LocalAIProvider(tool, getName(), this);
     }
 
     public ContextSnapshot collectCurrentContext() {
         Program program = currentProgram;
         ProgramLocation location = currentLocation;
-        return contextCollector.collect(program, location, protectionReport);
+        return contextCollector.collect(
+            program,
+            location,
+            protectionReport,
+            networkReport
+        );
     }
 
     public ProtectionReport scanProtection() {
@@ -39,9 +48,15 @@ public class LocalAIPlugin extends ProgramPlugin {
         return report;
     }
 
+    public NetworkReport scanNetworkCommunication() {
+        NetworkReport report = networkScanner.scan(currentProgram);
+        networkReport = report;
+        return report;
+    }
+
     @Override
     protected void programActivated(Program program) {
-        protectionReport = ProtectionReport.notScanned();
+        resetProgramScans();
         if (provider != null) {
             provider.updateContextSummary(program, currentLocation);
         }
@@ -49,10 +64,15 @@ public class LocalAIPlugin extends ProgramPlugin {
 
     @Override
     protected void programDeactivated(Program program) {
-        protectionReport = ProtectionReport.notScanned();
+        resetProgramScans();
         if (provider != null) {
             provider.updateContextSummary(currentProgram, null);
         }
+    }
+
+    private void resetProgramScans() {
+        protectionReport = ProtectionReport.notScanned();
+        networkReport = NetworkReport.notScanned();
     }
 
     @Override
