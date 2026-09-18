@@ -52,6 +52,7 @@ public class LocalAIProvider extends ComponentProviderAdapter {
     private JButton checkButton;
     private JButton protectionScanButton;
     private JButton networkScanButton;
+    private JButton gameFolderScanButton;
     private JButton preservationAnalysisButton;
     private JButton clearButton;
     private volatile boolean busy;
@@ -95,13 +96,14 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         mainPanel = new JPanel(new BorderLayout(6, 6));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
 
-        JPanel settings = new JPanel(new GridLayout(7, 2, 5, 4));
+        JPanel settings = new JPanel(new GridLayout(8, 2, 5, 4));
         urlField = new JTextField(DEFAULT_URL);
         modelField = new JTextField(DEFAULT_MODEL);
         allowEdits = new JCheckBox("Allow AI edits (undoable)", true);
         checkButton = new JButton("Check Ollama");
         protectionScanButton = new JButton("DRM / Protector Scan");
         networkScanButton = new JButton("Network / Server Scan");
+        gameFolderScanButton = new JButton("Analyze Game Folder");
         preservationAnalysisButton = new JButton("Preservation Analysis (AI)");
 
         settings.add(new JLabel("Ollama URL (loopback only)"));
@@ -114,6 +116,8 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         settings.add(protectionScanButton);
         settings.add(new JLabel("Game preservation"));
         settings.add(networkScanButton);
+        settings.add(new JLabel("Adjacent modules"));
+        settings.add(gameFolderScanButton);
         settings.add(new JLabel("One-button workflow"));
         settings.add(preservationAnalysisButton);
 
@@ -156,6 +160,7 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         checkButton.addActionListener(e -> checkOllama());
         protectionScanButton.addActionListener(e -> scanProtection());
         networkScanButton.addActionListener(e -> scanNetworkCommunication());
+        gameFolderScanButton.addActionListener(e -> scanGameFolder());
         preservationAnalysisButton.addActionListener(e -> runPreservationAnalysis());
 
         input.getInputMap().put(
@@ -248,6 +253,34 @@ public class LocalAIProvider extends ComponentProviderAdapter {
                 statusLabel.setText("Status: network scan complete");
                 appendSystem(report.toDisplayText());
             }));
+    }
+
+    private void scanGameFolder() {
+        if (busy) {
+            return;
+        }
+
+        setBusy(true);
+        statusLabel.setText("Status: scanning game folder...");
+
+        CompletableFuture.supplyAsync(() ->
+            plugin.scanGameFolder(
+                message -> SwingUtilities.invokeLater(
+                    () -> statusLabel.setText("Status: " + message)
+                )
+            )
+        ).whenComplete((report, error) -> SwingUtilities.invokeLater(() -> {
+            setBusy(false);
+
+            if (error != null) {
+                statusLabel.setText("Status: game folder scan failed");
+                appendSystem("Game folder scan failed: " + rootMessage(error));
+                return;
+            }
+
+            statusLabel.setText("Status: game folder scan complete");
+            appendSystem(report.toDisplayText());
+        }));
     }
 
     private void runPreservationAnalysis() {
@@ -385,6 +418,7 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         checkButton.setEnabled(!value);
         protectionScanButton.setEnabled(!value);
         networkScanButton.setEnabled(!value);
+        gameFolderScanButton.setEnabled(!value);
         preservationAnalysisButton.setEnabled(!value);
     }
 
