@@ -69,6 +69,46 @@ Do not claim an action succeeded; the Ghidra extension will report whether it wa
         return content;
     }
 
+    public String complete(String baseUrl, String model, String systemPrompt, String userPrompt)
+            throws IOException, InterruptedException {
+
+        URI uri = localUri(baseUrl, "/api/chat");
+
+        StringBuilder json = new StringBuilder();
+        json.append("{\"model\":").append(jsonString(model));
+        json.append(",\"stream\":false");
+        json.append(",\"options\":{\"temperature\":0.15}");
+        json.append(",\"messages\":[");
+        appendMessage(json, "system", systemPrompt == null ? "" : systemPrompt);
+        json.append(',');
+        appendMessage(json, "user", userPrompt == null ? "" : userPrompt);
+        json.append("]}");
+
+        HttpRequest request = HttpRequest.newBuilder(uri)
+            .timeout(REQUEST_TIMEOUT)
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
+            .build();
+
+        HttpResponse<String> response =
+            client.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            throw new IOException("Ollama returned HTTP " + response.statusCode() + ": " +
+                abbreviate(response.body(), 800));
+        }
+
+        String content = extractJsonStringField(response.body(), "content");
+        if (content == null) {
+            String error = extractJsonStringField(response.body(), "error");
+            if (error != null) {
+                throw new IOException("Ollama error: " + error);
+            }
+            throw new IOException("Ollama response did not contain message.content");
+        }
+        return content;
+    }
+
     public String check(String baseUrl) throws IOException, InterruptedException {
         URI uri = localUri(baseUrl, "/api/tags");
         HttpRequest request = HttpRequest.newBuilder(uri)
