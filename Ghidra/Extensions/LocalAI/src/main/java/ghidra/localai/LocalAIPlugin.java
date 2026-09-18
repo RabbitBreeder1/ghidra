@@ -16,22 +16,32 @@ import ghidra.program.util.ProgramLocation;
 )
 public class LocalAIPlugin extends ProgramPlugin {
     private final ContextCollector contextCollector;
+    private final ProtectionDetector protectionDetector;
     private final LocalAIProvider provider;
+    private volatile ProtectionReport protectionReport = ProtectionReport.notScanned();
 
     public LocalAIPlugin(PluginTool tool) {
         super(tool);
         contextCollector = new ContextCollector(tool);
+        protectionDetector = new ProtectionDetector();
         provider = new LocalAIProvider(tool, getName(), this);
     }
 
     public ContextSnapshot collectCurrentContext() {
         Program program = currentProgram;
         ProgramLocation location = currentLocation;
-        return contextCollector.collect(program, location);
+        return contextCollector.collect(program, location, protectionReport);
+    }
+
+    public ProtectionReport scanProtection() {
+        ProtectionReport report = protectionDetector.scan(currentProgram);
+        protectionReport = report;
+        return report;
     }
 
     @Override
     protected void programActivated(Program program) {
+        protectionReport = ProtectionReport.notScanned();
         if (provider != null) {
             provider.updateContextSummary(program, currentLocation);
         }
@@ -39,6 +49,7 @@ public class LocalAIPlugin extends ProgramPlugin {
 
     @Override
     protected void programDeactivated(Program program) {
+        protectionReport = ProtectionReport.notScanned();
         if (provider != null) {
             provider.updateContextSummary(currentProgram, null);
         }
