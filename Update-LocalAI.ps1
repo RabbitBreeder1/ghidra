@@ -59,7 +59,7 @@ if ($ghidraProcesses.Count -gt 0) {
 $version = Get-PropertyValue $appProperties "application.version"
 $release = Get-PropertyValue $appProperties "application.release.name"
 
-$settingsFolderName = "ghidra_\${version}_\${release}"
+$settingsFolderName = "ghidra_${version}_${release}"
 $targetRoot = Join-Path $env:APPDATA "ghidra\$settingsFolderName\Extensions"
 $target = Join-Path $targetRoot "LocalAI"
 
@@ -161,18 +161,47 @@ try {
 
     Write-Step "Replacing the installed LocalAI extension"
 
-    if (Test-Path -LiteralPath $target) {
-        Remove-Item -LiteralPath $target -Recurse -Force
+    $rollback = Join-Path $targetRoot ("LocalAI.__old__." + [guid]::NewGuid().ToString("N"))
+    $hadOldInstall = Test-Path -LiteralPath $target
+
+    try {
+        if ($hadOldInstall) {
+            Move-Item -LiteralPath $target -Destination $rollback
+        }
+
+        Move-Item -LiteralPath $staging -Destination $target
+
+        $installedProperties = Join-Path $target "extension.properties"
+        $installedJar = Get-ChildItem -LiteralPath (Join-Path $target "lib") -Filter "*.jar" -File -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+
+        if (-not (Test-Path -LiteralPath $installedProperties) -or -not $installedJar) {
+            throw "Installation verification failed after replacement."
+        }
+
+        $sourceJarHash = (Get-FileHash -LiteralPath $sourceJar.FullName -Algorithm SHA256).Hash
+        $installedJarHash = (Get-FileHash -LiteralPath $installedJar.FullName -Algorithm SHA256).Hash
+
+        if ($sourceJarHash -ne $installedJarHash) {
+            throw "Installed JAR hash does not match the freshly built JAR."
+        }
+
+        if (Test-Path -LiteralPath $rollback) {
+            Remove-Item -LiteralPath $rollback -Recurse -Force
+        }
     }
+    catch {
+        Write-Host "Replacement failed. Restoring the previous LocalAI installation..." -ForegroundColor Yellow
 
-    Move-Item -LiteralPath $staging -Destination $target
+        if (Test-Path -LiteralPath $target) {
+            Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue
+        }
 
-    $installedProperties = Join-Path $target "extension.properties"
-    $installedJar = Get-ChildItem -LiteralPath (Join-Path $target "lib") -Filter "*.jar" -File -ErrorAction SilentlyContinue |
-        Select-Object -First 1
+        if ($hadOldInstall -and (Test-Path -LiteralPath $rollback)) {
+            Move-Item -LiteralPath $rollback -Destination $target
+        }
 
-    if (-not (Test-Path -LiteralPath $installedProperties) -or -not $installedJar) {
-        throw "Installation verification failed after replacement."
+        throw
     }
 
     Write-Step "Cleaning old LocalAI backups"
