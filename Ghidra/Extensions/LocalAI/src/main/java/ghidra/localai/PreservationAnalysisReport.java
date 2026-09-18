@@ -29,6 +29,25 @@ public record PreservationAnalysisReport(
             sb.append(synthesis.trim()).append("\n\n");
         }
 
+        if (gameFolderReport != null && gameFolderReport.hasCandidates()) {
+            sb.append("Game-folder module candidates:\n");
+            int moduleCount = 0;
+            for (GameModuleFinding module : gameFolderReport.modules()) {
+                if (moduleCount++ >= 10) {
+                    sb.append("- ... additional module candidates omitted ...\n");
+                    break;
+                }
+                sb.append("- ")
+                    .append(module.fileName())
+                    .append(" [score ")
+                    .append(module.score())
+                    .append("] ")
+                    .append(module.relativePath())
+                    .append("\n");
+            }
+            sb.append('\n');
+        }
+
         if (functions != null && !functions.isEmpty()) {
             sb.append("Prioritized functions reviewed: ").append(functions.size()).append('\n');
             for (PreservationFunctionAssessment assessment : functions) {
