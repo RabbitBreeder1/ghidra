@@ -50,6 +50,7 @@ public class LocalAIProvider extends ComponentProviderAdapter {
     private JLabel contextLabel;
     private JButton sendButton;
     private JButton checkButton;
+    private JButton protectionScanButton;
     private JButton clearButton;
     private volatile boolean busy;
 
