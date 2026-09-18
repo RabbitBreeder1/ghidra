@@ -52,6 +52,7 @@ public class LocalAIProvider extends ComponentProviderAdapter {
     private JButton checkButton;
     private JButton protectionScanButton;
     private JButton networkScanButton;
+    private JButton preservationAnalysisButton;
     private JButton clearButton;
     private volatile boolean busy;
 
@@ -94,13 +95,14 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         mainPanel = new JPanel(new BorderLayout(6, 6));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
 
-        JPanel settings = new JPanel(new GridLayout(6, 2, 5, 4));
+        JPanel settings = new JPanel(new GridLayout(7, 2, 5, 4));
         urlField = new JTextField(DEFAULT_URL);
         modelField = new JTextField(DEFAULT_MODEL);
         allowEdits = new JCheckBox("Allow AI edits (undoable)", true);
         checkButton = new JButton("Check Ollama");
         protectionScanButton = new JButton("DRM / Protector Scan");
         networkScanButton = new JButton("Network / Server Scan");
+        preservationAnalysisButton = new JButton("Preservation Analysis (AI)");
 
         settings.add(new JLabel("Ollama URL (loopback only)"));
         settings.add(urlField);
@@ -112,6 +114,8 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         settings.add(protectionScanButton);
         settings.add(new JLabel("Game preservation"));
         settings.add(networkScanButton);
+        settings.add(new JLabel("One-button workflow"));
+        settings.add(preservationAnalysisButton);
 
         statusLabel = new JLabel("Status: not checked");
         contextLabel = new JLabel("Context: no active program");
@@ -152,6 +156,7 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         checkButton.addActionListener(e -> checkOllama());
         protectionScanButton.addActionListener(e -> scanProtection());
         networkScanButton.addActionListener(e -> scanNetworkCommunication());
+        preservationAnalysisButton.addActionListener(e -> runPreservationAnalysis());
 
         input.getInputMap().put(
             KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.CTRL_DOWN_MASK),
@@ -245,6 +250,62 @@ public class LocalAIProvider extends ComponentProviderAdapter {
             }));
     }
 
+    private void runPreservationAnalysis() {
+        if (busy) {
+            return;
+        }
+
+        String url = urlField.getText().trim();
+        String model = modelField.getText().trim();
+        if (model.isEmpty()) {
+            appendSystem("Enter an Ollama model name first.");
+            return;
+        }
+
+        setBusy(true);
+        statusLabel.setText("Status: starting preservation analysis...");
+        appendSystem(
+            "Starting one-button preservation analysis. " +
+            "Ghidra will prioritize server/network/auth-related functions and Qwen will review " +
+            "at most 18 of the strongest candidates in this first pass."
+        );
+
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                return plugin.runPreservationAnalysis(
+                    ollamaClient,
+                    url,
+                    model,
+                    message -> SwingUtilities.invokeLater(
+                        () -> statusLabel.setText("Status: " + message)
+                    )
+                );
+            }
+            catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }).whenComplete((report, error) -> SwingUtilities.invokeLater(() -> {
+            setBusy(false);
+
+            if (error != null) {
+                statusLabel.setText("Status: preservation analysis failed");
+                appendSystem("Preservation analysis failed: " + rootMessage(error));
+                return;
+            }
+
+            statusLabel.setText("Status: preservation analysis complete");
+            appendSystem(report.toDisplayText());
+
+            String summary = report.synthesis();
+            if (summary != null && !summary.isBlank()) {
+                history.add(new ChatMessage(
+                    "assistant",
+                    "Preservation analysis result:\n" + summary.trim()
+                ));
+            }
+        }));
+    }
+
     private void send() {
         String prompt = input.getText().trim();
         if (prompt.isEmpty() || busy) {
@@ -324,6 +385,7 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         checkButton.setEnabled(!value);
         protectionScanButton.setEnabled(!value);
         networkScanButton.setEnabled(!value);
+        preservationAnalysisButton.setEnabled(!value);
     }
 
     private void appendUser(String text) {
