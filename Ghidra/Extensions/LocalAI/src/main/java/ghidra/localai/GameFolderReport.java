@@ -61,15 +61,25 @@ public record GameFolderReport(
                     .append(module.relativePath())
                     .append('\n');
 
-                if (module.evidenceHits() != null && !module.evidenceHits().isEmpty()) {
-                    for (GameEvidenceHit hit : module.evidenceHits()) {
-                        sb.append("  - ").append(hit.toDisplayText()).append('\n');
-                    }
-                }
-                else {
-                    sb.append("  Evidence: ")
+                if (module.evidence() != null && !module.evidence().isEmpty()) {
+                    sb.append("  Score evidence: ")
                         .append(String.join("; ", module.evidence()))
                         .append('\n');
+                }
+
+                if (module.evidenceHits() != null && !module.evidenceHits().isEmpty()) {
+                    boolean showedMapped = false;
+                    for (GameEvidenceHit hit : module.evidenceHits()) {
+                        if ((hit.mappedAddress() != null && !hit.mappedAddress().isBlank()) ||
+                            (hit.referencingFunctions() != null &&
+                                !hit.referencingFunctions().isBlank())) {
+                            if (!showedMapped) {
+                                sb.append("  Ghidra-mapped raw hits:\n");
+                                showedMapped = true;
+                            }
+                            sb.append("    - ").append(hit.toDisplayText()).append('\n');
+                        }
+                    }
                 }
             }
         }
@@ -101,7 +111,9 @@ public record GameFolderReport(
             sb.append(module.fileName())
                 .append(" | score=")
                 .append(module.score())
-                .append(" | ");
+                .append(" | score evidence: ")
+                .append(module.evidence() == null ? "" : String.join("; ", module.evidence()))
+                .append(" | raw hits: ");
 
             if (module.evidenceHits() != null && !module.evidenceHits().isEmpty()) {
                 int hitCount = 0;
