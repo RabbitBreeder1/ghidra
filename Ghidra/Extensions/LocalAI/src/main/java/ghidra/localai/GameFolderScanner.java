@@ -16,7 +16,13 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
+import ghidra.program.model.address.Address;
+import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Program;
+import ghidra.program.model.mem.MemoryBlock;
+import ghidra.program.model.mem.MemoryBlockSourceInfo;
+import ghidra.program.model.symbol.Reference;
+import ghidra.program.model.symbol.ReferenceIterator;
 
 public class GameFolderScanner {
     private static final int MAX_FILES = 300;
@@ -164,12 +170,16 @@ public class GameFolderScanner {
                 relative = path.toString();
             }
 
+            List<GameEvidenceHit> mappedHits =
+                mapHitsForCurrentProgram(program, executable.toPath(), path, scan.hits());
+
             findings.add(new GameModuleFinding(
                 path.getFileName().toString(),
                 relative,
                 safeSize(path),
                 scan.score(),
-                List.copyOf(scan.evidence())
+                List.copyOf(scan.evidence()),
+                mappedHits
             ));
         }
 
@@ -199,6 +209,7 @@ public class GameFolderScanner {
     private ModuleScan scanFile(File file, long maxBytes) {
         Set<String> evidence = new LinkedHashSet<>();
         Set<String> matchedMarkers = new LinkedHashSet<>();
+        List<GameEvidenceHit> hits = new ArrayList<>();
         int score = 0;
 
         String lowerName = file.getName().toLowerCase(Locale.ROOT);
@@ -244,20 +255,38 @@ public class GameFolderScanner {
                     .toLowerCase(Locale.ROOT);
 
                 for (Marker marker : MARKERS) {
-                    if (ascii.contains(marker.value()) &&
-                        matchedMarkers.add(marker.value())) {
+                    int asciiIndex = ascii.indexOf(marker.value());
+                    if (asciiIndex >= 0 && matchedMarkers.add(marker.value())) {
                         score += marker.weight();
-                        addEvidence(evidence, marker.description() + ": " + marker.value());
+                        long fileOffset = (bytesScanned - carryLength) + asciiIndex;
+                        GameEvidenceHit hit = new GameEvidenceHit(
+                            marker.description(),
+                            marker.value(),
+                            fileOffset,
+                            "ASCII",
+                            "",
+                            ""
+                        );
+                        hits.add(hit);
+                        addEvidence(evidence, hit.toDisplayText());
                     }
                 }
 
-                String utf16Collapsed = collapseUtf16LeAscii(combined).toLowerCase(Locale.ROOT);
                 for (Marker marker : MARKERS) {
-                    if (utf16Collapsed.contains(marker.value()) &&
-                        matchedMarkers.add(marker.value())) {
+                    int utf16Index = indexOfUtf16LeAsciiIgnoreCase(combined, marker.value());
+                    if (utf16Index >= 0 && matchedMarkers.add(marker.value())) {
                         score += marker.weight();
-                        addEvidence(evidence,
-                            marker.description() + " (UTF-16LE): " + marker.value());
+                        long fileOffset = (bytesScanned - carryLength) + utf16Index;
+                        GameEvidenceHit hit = new GameEvidenceHit(
+                            marker.description(),
+                            marker.value(),
+                            fileOffset,
+                            "UTF-16LE",
+                            "",
+                            ""
+                        );
+                        hits.add(hit);
+                        addEvidence(evidence, hit.toDisplayText());
                     }
                 }
 
@@ -287,7 +316,13 @@ public class GameFolderScanner {
             addEvidence(evidence, "read error: " + e.getMessage());
         }
 
-        return new ModuleScan(Math.max(0, score), List.copyOf(evidence), bytesScanned, truncated);
+        return new ModuleScan(
+            Math.max(0, score),
+            List.copyOf(evidence),
+            List.copyOf(hits),
+            bytesScanned,
+            truncated
+        );
     }
 
     private static boolean isExecutableModule(Path path) {
@@ -304,22 +339,106 @@ public class GameFolderScanner {
         }
     }
 
-    private static String collapseUtf16LeAscii(byte[] bytes) {
-        StringBuilder sb = new StringBuilder(bytes.length / 2);
+    private static int indexOfUtf16LeAsciiIgnoreCase(byte[] bytes, String marker) {
+        if (marker == null || marker.isEmpty()) {
+            return -1;
+        }
 
-        for (int i = 0; i + 1 < bytes.length; i += 2) {
-            int low = bytes[i] & 0xff;
-            int high = bytes[i + 1] & 0xff;
+        for (int start = 0; start + (marker.length() * 2) <= bytes.length; start++) {
+            boolean match = true;
+            for (int i = 0; i < marker.length(); i++) {
+                int low = bytes[start + (i * 2)] & 0xff;
+                int high = bytes[start + (i * 2) + 1] & 0xff;
+                char expected = Character.toLowerCase(marker.charAt(i));
 
-            if (high == 0 && low >= 0x20 && low <= 0x7e) {
-                sb.append((char)low);
+                if (high != 0 || Character.toLowerCase((char)low) != expected) {
+                    match = false;
+                    break;
+                }
             }
-            else {
-                sb.append(' ');
+
+            if (match) {
+                return start;
             }
         }
 
-        return sb.toString();
+        return -1;
+    }
+
+    private static List<GameEvidenceHit> mapHitsForCurrentProgram(
+            Program program,
+            Path executablePath,
+            Path scannedPath,
+            List<GameEvidenceHit> hits) {
+
+        if (program == null || executablePath == null || scannedPath == null ||
+            hits == null || hits.isEmpty()) {
+            return hits == null ? List.of() : List.copyOf(hits);
+        }
+
+        try {
+            if (!Files.isSameFile(executablePath, scannedPath)) {
+                return List.copyOf(hits);
+            }
+        }
+        catch (IOException e) {
+            if (!executablePath.toAbsolutePath().normalize()
+                    .equals(scannedPath.toAbsolutePath().normalize())) {
+                return List.copyOf(hits);
+            }
+        }
+
+        List<GameEvidenceHit> mapped = new ArrayList<>();
+        for (GameEvidenceHit hit : hits) {
+            Address address = locateAddressForFileOffset(program, hit.fileOffset());
+            String mappedAddress = address == null ? "" : address.toString();
+            String referencingFunctions =
+                address == null ? "" : findReferencingFunctions(program, address);
+
+            mapped.add(new GameEvidenceHit(
+                hit.description(),
+                hit.marker(),
+                hit.fileOffset(),
+                hit.encoding(),
+                mappedAddress,
+                referencingFunctions
+            ));
+        }
+
+        return List.copyOf(mapped);
+    }
+
+    private static Address locateAddressForFileOffset(Program program, long fileOffset) {
+        if (fileOffset < 0) {
+            return null;
+        }
+
+        for (MemoryBlock block : program.getMemory().getBlocks()) {
+            for (MemoryBlockSourceInfo sourceInfo : block.getSourceInfos()) {
+                Address address = sourceInfo.locateAddressForFileOffset(fileOffset);
+                if (address != null) {
+                    return address;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static String findReferencingFunctions(Program program, Address address) {
+        ReferenceIterator refs = program.getReferenceManager().getReferencesTo(address);
+        LinkedHashSet<String> functions = new LinkedHashSet<>();
+
+        while (refs.hasNext() && functions.size() < 8) {
+            Reference ref = refs.next();
+            Function function =
+                program.getFunctionManager().getFunctionContaining(ref.getFromAddress());
+            if (function != null) {
+                functions.add(function.getName() + "@" + function.getEntryPoint());
+            }
+        }
+
+        return String.join(", ", functions);
     }
 
     private static int maxMarkerLength() {
@@ -354,6 +473,7 @@ public class GameFolderScanner {
     private record ModuleScan(
             int score,
             List<String> evidence,
+            List<GameEvidenceHit> hits,
             long bytesScanned,
             boolean truncated) {
     }
