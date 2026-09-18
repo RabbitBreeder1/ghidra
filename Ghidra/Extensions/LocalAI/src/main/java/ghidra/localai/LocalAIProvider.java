@@ -14,6 +14,7 @@ import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
@@ -53,6 +54,8 @@ public class LocalAIProvider extends ComponentProviderAdapter {
     private JButton protectionScanButton;
     private JButton networkScanButton;
     private JButton gameFolderScanButton;
+    private JButton offlineBlockEnableButton;
+    private JButton offlineBlockRemoveButton;
     private JButton preservationAnalysisButton;
     private JButton clearButton;
     private volatile boolean busy;
@@ -96,7 +99,7 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         mainPanel = new JPanel(new BorderLayout(6, 6));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
 
-        JPanel settings = new JPanel(new GridLayout(8, 2, 5, 4));
+        JPanel settings = new JPanel(new GridLayout(10, 2, 5, 4));
         urlField = new JTextField(DEFAULT_URL);
         modelField = new JTextField(DEFAULT_MODEL);
         allowEdits = new JCheckBox("Allow AI edits (undoable)", true);
@@ -104,6 +107,8 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         protectionScanButton = new JButton("DRM / Protector Scan");
         networkScanButton = new JButton("Network / Server Scan");
         gameFolderScanButton = new JButton("Analyze Game Folder");
+        offlineBlockEnableButton = new JButton("Enable Offline Trace Block");
+        offlineBlockRemoveButton = new JButton("Remove Offline Trace Block");
         preservationAnalysisButton = new JButton("Preservation Analysis (AI)");
 
         settings.add(new JLabel("Ollama URL (loopback only)"));
@@ -118,6 +123,10 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         settings.add(networkScanButton);
         settings.add(new JLabel("Adjacent modules"));
         settings.add(gameFolderScanButton);
+        settings.add(new JLabel("Dynamic-trace safety"));
+        settings.add(offlineBlockEnableButton);
+        settings.add(new JLabel("Dynamic-trace cleanup"));
+        settings.add(offlineBlockRemoveButton);
         settings.add(new JLabel("One-button workflow"));
         settings.add(preservationAnalysisButton);
 
@@ -161,6 +170,8 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         protectionScanButton.addActionListener(e -> scanProtection());
         networkScanButton.addActionListener(e -> scanNetworkCommunication());
         gameFolderScanButton.addActionListener(e -> scanGameFolder());
+        offlineBlockEnableButton.addActionListener(e -> enableOfflineTraceBlock());
+        offlineBlockRemoveButton.addActionListener(e -> removeOfflineTraceBlock());
         preservationAnalysisButton.addActionListener(e -> runPreservationAnalysis());
 
         input.getInputMap().put(
@@ -279,6 +290,68 @@ public class LocalAIProvider extends ComponentProviderAdapter {
             }
 
             statusLabel.setText("Status: game folder scan complete");
+            appendSystem(report.toDisplayText());
+        }));
+    }
+
+    private void enableOfflineTraceBlock() {
+        if (busy) {
+            return;
+        }
+
+        int choice = JOptionPane.showConfirmDialog(
+            mainPanel,
+            "This will request administrator permission and create inbound/outbound Windows " +
+            "Firewall BLOCK rules for the currently loaded executable.\n\n" +
+            "It does NOT launch the game and it does NOT automatically block separate launcher " +
+            "or helper processes. Continue?",
+            "Enable Offline Trace Network Block",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE
+        );
+
+        if (choice != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        changeOfflineTraceBlock(true);
+    }
+
+    private void removeOfflineTraceBlock() {
+        if (busy) {
+            return;
+        }
+        changeOfflineTraceBlock(false);
+    }
+
+    private void changeOfflineTraceBlock(boolean enable) {
+        setBusy(true);
+        statusLabel.setText(
+            enable
+                ? "Status: enabling offline trace firewall block..."
+                : "Status: removing offline trace firewall block..."
+        );
+
+        CompletableFuture.supplyAsync(() ->
+            enable
+                ? plugin.enableOfflineTraceFirewall()
+                : plugin.disableOfflineTraceFirewall()
+        ).whenComplete((report, error) -> SwingUtilities.invokeLater(() -> {
+            setBusy(false);
+
+            if (error != null) {
+                statusLabel.setText("Status: offline trace firewall action failed");
+                appendSystem("Offline trace firewall action failed: " + rootMessage(error));
+                return;
+            }
+
+            statusLabel.setText(
+                report.success()
+                    ? (enable
+                        ? "Status: offline trace network block enabled"
+                        : "Status: offline trace network block removed")
+                    : "Status: offline trace firewall action failed"
+            );
             appendSystem(report.toDisplayText());
         }));
     }
@@ -419,6 +492,8 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         protectionScanButton.setEnabled(!value);
         networkScanButton.setEnabled(!value);
         gameFolderScanButton.setEnabled(!value);
+        offlineBlockEnableButton.setEnabled(!value);
+        offlineBlockRemoveButton.setEnabled(!value);
         preservationAnalysisButton.setEnabled(!value);
     }
 
