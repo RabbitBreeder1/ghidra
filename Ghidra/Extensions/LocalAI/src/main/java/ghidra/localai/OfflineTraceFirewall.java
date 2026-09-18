@@ -13,7 +13,6 @@ import ghidra.program.model.listing.Program;
 
 public class OfflineTraceFirewall {
     private static final int MAX_EXECUTABLES = 200;
-    private static final int MAX_DEPTH = 3;
 
     public OfflineTraceFirewallReport enable(Program program) {
         return changeGameFolder(program, true);
@@ -101,7 +100,8 @@ public class OfflineTraceFirewall {
                 ? "Verified inbound/outbound Windows Firewall block rules for " +
                     executables.size() + " EXE(s) under " + root +
                     ". This safety gate does not execute the game. DLLs loaded inside those " +
-                    "blocked processes inherit the process network block."
+                    "blocked processes inherit the process network block. Launchers or helper " +
+                    "processes located outside this game folder are NOT covered."
                 : "Removed the LocalAI SafeTrace firewall rules for game folder " + root + ".";
 
             return new OfflineTraceFirewallReport(
@@ -127,12 +127,20 @@ public class OfflineTraceFirewall {
     private static List<Path> enumerateExecutables(Path root) throws IOException {
         List<Path> executables = new ArrayList<>();
 
-        try (Stream<Path> stream = Files.walk(root, MAX_DEPTH)) {
+        try (Stream<Path> stream = Files.walk(root)) {
             stream.filter(Files::isRegularFile)
                 .filter(path -> path.getFileName().toString()
                     .toLowerCase(Locale.ROOT).endsWith(".exe"))
-                .limit(MAX_EXECUTABLES)
+                .limit(MAX_EXECUTABLES + 1L)
                 .forEach(path -> executables.add(path.toAbsolutePath().normalize()));
+        }
+
+        if (executables.size() > MAX_EXECUTABLES) {
+            throw new IOException(
+                "More than " + MAX_EXECUTABLES +
+                " executable files were found under the game folder. " +
+                "LocalAI refuses to create an incomplete safety block."
+            );
         }
 
         return List.copyOf(executables);
@@ -189,11 +197,9 @@ public class OfflineTraceFirewall {
     private static int runElevatedPowerShell(Path script)
             throws IOException, InterruptedException {
 
-        String scriptPath = psSingleQuoted(script.toAbsolutePath().toString());
-
-        String quotedScriptPath = scriptPath.replace("\"", "\\\"");
+        String scriptPath = script.toAbsolutePath().toString();
         String argumentLine =
-            "-NoProfile -ExecutionPolicy Bypass -File \\\"" + quotedScriptPath + "\\\"";
+            "-NoProfile -ExecutionPolicy Bypass -File \"" + scriptPath + "\"";
 
         String command =
             "$p = Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru " +
