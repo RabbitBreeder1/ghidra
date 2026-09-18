@@ -23,7 +23,14 @@ public class ActionApplier {
             return List.of("AI edits skipped: the program is read-only.");
         }
 
-        int tx = program.startTransaction("LocalAI edits");
+        int tx;
+        try {
+            tx = program.startTransaction("LocalAI edits");
+        }
+        catch (Exception e) {
+            return List.of("AI edits could not start a Ghidra transaction: " + e.getMessage());
+        }
+
         boolean commit = false;
         List<String> applied = new ArrayList<>();
 
