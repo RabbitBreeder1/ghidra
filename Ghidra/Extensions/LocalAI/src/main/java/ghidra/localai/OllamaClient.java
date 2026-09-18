@@ -164,10 +164,15 @@ Do not claim an action succeeded; the Ghidra extension will report whether it wa
         }
 
         URI baseUri = URI.create(base);
+        String scheme = baseUri.getScheme();
+        if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
+            throw new IllegalArgumentException("Ollama URL must use http or https");
+        }
+
         String host = baseUri.getHost();
         boolean local = host != null &&
             ("127.0.0.1".equals(host) || "localhost".equalsIgnoreCase(host) ||
-                "::1".equals(host));
+                "::1".equals(host) || "[::1]".equals(host));
 
         if (!local) {
             throw new IllegalArgumentException(
