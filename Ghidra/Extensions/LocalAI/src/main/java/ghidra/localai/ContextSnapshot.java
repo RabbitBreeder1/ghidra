@@ -17,6 +17,7 @@ public record ContextSnapshot(
         String decompiledCode,
         String protectionReport,
         String networkReport,
+        String gameFolderReport,
         String preservationReport) {
 
     public boolean hasFunction() {
@@ -40,6 +41,9 @@ public record ContextSnapshot(
 
         sb.append("\nNETWORK / SERVER COMMUNICATION CHECK\n");
         sb.append(nullToEmpty(networkReport)).append('\n');
+
+        sb.append("\nGAME FOLDER MODULE ANALYSIS\n");
+        sb.append(nullToEmpty(gameFolderReport)).append('\n');
 
         sb.append("\nPRESERVATION ANALYSIS\n");
         sb.append(nullToEmpty(preservationReport)).append('\n');
