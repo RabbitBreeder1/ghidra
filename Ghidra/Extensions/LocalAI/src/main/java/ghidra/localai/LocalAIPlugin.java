@@ -19,6 +19,7 @@ public class LocalAIPlugin extends ProgramPlugin {
     private final ProtectionDetector protectionDetector;
     private final NetworkCommunicationScanner networkScanner;
     private final GameFolderScanner gameFolderScanner;
+    private final AnalysisReadinessChecker readinessChecker;
     private final OfflineTraceFirewall offlineTraceFirewall;
     private final PreservationAnalyzer preservationAnalyzer;
     private final LocalAIProvider provider;
@@ -35,6 +36,7 @@ public class LocalAIPlugin extends ProgramPlugin {
         protectionDetector = new ProtectionDetector();
         networkScanner = new NetworkCommunicationScanner();
         gameFolderScanner = new GameFolderScanner();
+        readinessChecker = new AnalysisReadinessChecker();
         offlineTraceFirewall = new OfflineTraceFirewall();
         preservationAnalyzer = new PreservationAnalyzer(tool);
         provider = new LocalAIProvider(tool, getName(), this);
@@ -71,12 +73,45 @@ public class LocalAIPlugin extends ProgramPlugin {
         return report;
     }
 
+    public AnalysisReadinessReport checkReadiness() {
+        return readinessChecker.check(currentProgram);
+    }
+
     public OfflineTraceFirewallReport enableOfflineTraceFirewall() {
         return offlineTraceFirewall.enable(currentProgram);
     }
 
     public OfflineTraceFirewallReport disableOfflineTraceFirewall() {
         return offlineTraceFirewall.disable(currentProgram);
+    }
+
+    public SafePreservationWorkflowResult runSafePreservationWorkflow(
+            OllamaClient ollama,
+            String baseUrl,
+            String model,
+            java.util.function.Consumer<String> progress) throws Exception {
+
+        AnalysisReadinessReport readiness = readinessChecker.check(currentProgram);
+        if (!readiness.programOpen()) {
+            return new SafePreservationWorkflowResult(
+                readiness,
+                PreservationAnalysisReport.notRun()
+            );
+        }
+
+        if (progress != null) {
+            progress.accept("Checking local Ollama...");
+        }
+        ollama.check(baseUrl);
+
+        PreservationAnalysisReport preservation = runPreservationAnalysis(
+            ollama,
+            baseUrl,
+            model,
+            progress
+        );
+
+        return new SafePreservationWorkflowResult(readiness, preservation);
     }
 
     public PreservationAnalysisReport runPreservationAnalysis(
