@@ -1,10 +1,12 @@
 # Ghidra LocalAI
 
-A deliberately simple Ghidra extension that connects the current CodeBrowser session to a
-locally hosted Ollama model.
+A Ghidra preservation-analysis extension that connects CodeBrowser to a locally hosted Ollama model.
+
+Current LocalAI build ID: `2026-09-18-preservation-r5`.
 
 ## Current features
 
+- Visible LocalAI build ID in the panel so stale AppData-installed extensions are obvious.
 - Dockable Swing chat panel.
 - Ollama `/api/chat` support.
 - Loopback-only model endpoint by default and by enforcement:
@@ -58,15 +60,19 @@ locally hosted Ollama model.
     HTTP(S)/WebSocket URLs, and common login/auth/match/lobby paths
   - reports the strongest modules to import into Ghidra next
   - feeds the ranked module report into later LocalAI chat context.
-- **Offline Trace firewall safety actions (Windows)**:
-  - **Enable Offline Trace Block** asks for confirmation, triggers a UAC prompt, and creates
-    program-specific inbound and outbound Windows Firewall block rules for the loaded executable
-  - **Remove Offline Trace Block** removes only the LocalAI rules created for that executable
+- **Safe Offline Block firewall actions (Windows)**:
+  - **Enable Safe Offline Block (Folder)** asks for confirmation and a UAC prompt
+  - it enumerates EXEs under the loaded game's folder (bounded recursive scan), creates inbound and
+    outbound Windows Firewall block rules for each, and verifies the expected rules exist before
+    reporting success
+  - **Remove Safe Offline Block** removes that game-folder-specific LocalAI ruleset and verifies it
+    is gone
   - these actions do not execute the target and do not yet launch Ghidra's debugger
-  - separate launcher/helper processes are not automatically covered and must be handled before
-    dynamic tracing if the game uses them
-- **Preservation Analysis (AI)** one-button workflow:
+- **Safe Preservation Workflow** one-button workflow (never executes the target):
+  - checks Ghidra analysis readiness and verifies local Ollama first
   - automatically runs game-folder module analysis, DRM/protector scanning, and network/server discovery
+  - preserves raw marker file offsets and, for the currently loaded EXE, maps those offsets back to
+    Ghidra addresses/xrefs/functions where possible
   - finds functions referenced by network APIs/endpoints
   - looks for dynamic resolution through LoadLibrary/GetProcAddress/LdrLoadDll
   - searches for hidden networking DLL/API-name strings
