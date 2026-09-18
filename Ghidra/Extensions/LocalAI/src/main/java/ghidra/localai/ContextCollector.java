@@ -23,9 +23,20 @@ public class ContextCollector {
         this.tool = tool;
     }
 
-    public ContextSnapshot collect(Program program, ProgramLocation location) {
+    public ContextSnapshot collect(
+            Program program,
+            ProgramLocation location,
+            ProtectionReport protectionReport) {
+
+        String protectionText = protectionReport == null
+            ? "<not scanned>"
+            : protectionReport.toPromptText();
+
         if (program == null || program.isClosed()) {
-            return new ContextSnapshot(null, null, null, "<no active program>", "", "", "", "", "", "", "");
+            return new ContextSnapshot(
+                null, null, null, "<no active program>", "", "", "", "", "", "", "",
+                protectionText
+            );
         }
 
         Address cursor = location == null ? null : location.getAddress();
@@ -62,7 +73,8 @@ public class ContextCollector {
             prototype,
             functionComment,
             cursorComment,
-            decompiled
+            decompiled,
+            protectionText
         );
     }
 
