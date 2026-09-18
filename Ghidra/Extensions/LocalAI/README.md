@@ -2,7 +2,7 @@
 
 A Ghidra preservation-analysis extension that connects CodeBrowser to a locally hosted Ollama model.
 
-Current LocalAI build ID: `2026-09-18-preservation-r6`.
+Current LocalAI build ID: `2026-09-18-preservation-r7`.
 
 ## Current features
 
