@@ -75,8 +75,13 @@ STRICT EVIDENCE RULES:
 - Do not infer Winsock, TCP, UDP, HTTP, HTTPS, TLS, authentication, matchmaking, telemetry,
   version checking, or session management merely because the program is a game.
 - A generic LoadLibrary/GetProcAddress call is NOT networking evidence by itself.
-- Game-folder module rankings are raw filename/string heuristics. They identify modules to inspect,
-  but do not confirm what a module does until stronger Ghidra evidence supports it.
+- Game-folder evidence uses explicit tiers:
+  RAW_FILE = marker exists in file bytes only.
+  GHIDRA_MAPPED_NO_XREF = file offset maps into Ghidra, but no function reference is established.
+  GHIDRA_XREF_FUNCTION = Ghidra has an actual xref from a function to that mapped marker.
+- Only GHIDRA_XREF_FUNCTION or structured Ghidra import/reference evidence may support a function-role claim.
+- RAW_FILE and GHIDRA_MAPPED_NO_XREF may prioritize investigation but must never be described as proof
+  that a function calls an API, uses a protocol, or implements a service.
 - Separate CONFIRMED EVIDENCE from EVIDENCE-BACKED HYPOTHESES.
 - A hypothesis is allowed only when you cite the exact supplied clue that supports it.
 - If there are no network findings and no preservation-relevant function assessments, explicitly
@@ -167,12 +172,14 @@ The objective is interoperability research and preservation, not speculation.
         update(progress, "Building preservation map...");
         String synthesis;
 
-        boolean folderHasCandidates = gameFolder != null && gameFolder.hasCandidates();
+        boolean hasStructuredNetworkEvidence = network != null && network.hasFindings();
+        boolean hasFunctionEvidence = !assessments.isEmpty();
+        boolean hasFolderRawEvidence = gameFolder != null && gameFolder.hasCandidates();
 
-        if ((network == null || !network.hasFindings()) &&
-            assessments.isEmpty() &&
-            !folderHasCandidates) {
-            synthesis = buildNoEvidenceSynthesis(program, protection, network, gameFolder);
+        if (!hasStructuredNetworkEvidence && !hasFunctionEvidence) {
+            synthesis = hasFolderRawEvidence
+                ? buildRawFolderOnlySynthesis(program, protection, network, gameFolder)
+                : buildNoEvidenceSynthesis(program, protection, network, gameFolder);
         }
         else {
             String finalPrompt =
@@ -264,12 +271,6 @@ The objective is interoperability research and preservation, not speculation.
                     if (function != null && !function.isExternal()) {
                         referencedFunctions.add(function);
                     }
-                }
-
-                Function containing =
-                    program.getFunctionManager().getFunctionContaining(address);
-                if (containing != null && !containing.isExternal()) {
-                    referencedFunctions.add(containing);
                 }
 
                 int score = scoreRawHit(hit);
@@ -575,6 +576,73 @@ The objective is interoperability research and preservation, not speculation.
                 .append(function.isExternal() ? " [external]" : "")
                 .append('\n');
         }
+    }
+
+    private String buildRawFolderOnlySynthesis(
+            Program program,
+            ProtectionReport protection,
+            NetworkReport network,
+            GameFolderReport gameFolder) {
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("CONFIRMED EVIDENCE\n");
+        sb.append("- Raw byte scanning found networking/online-service markers in one or more ")
+            .append("game-folder modules. These are confirmed byte/string markers only.\n");
+
+        if (protection != null && protection.hasFindings()) {
+            sb.append("- Protection/packing indicators were detected; see the protection scan.\n");
+        }
+
+        int moduleCount = 0;
+        if (gameFolder != null && gameFolder.modules() != null) {
+            for (GameModuleFinding module : gameFolder.modules()) {
+                if (moduleCount++ >= 8) {
+                    sb.append("- ... additional module candidates omitted ...\n");
+                    break;
+                }
+
+                sb.append("- ")
+                    .append(module.fileName())
+                    .append(" score=")
+                    .append(module.score())
+                    .append("\n");
+
+                if (module.evidenceHits() != null) {
+                    int hitCount = 0;
+                    for (GameEvidenceHit hit : module.evidenceHits()) {
+                        if (hitCount++ >= 6) {
+                            break;
+                        }
+                        sb.append("  - ").append(hit.toDisplayText()).append("\n");
+                    }
+                }
+            }
+        }
+
+        sb.append("\nEVIDENCE-BACKED HYPOTHESES\n");
+        sb.append("- NONE promoted to protocol/service/function conclusions yet. ")
+            .append("Raw markers are not sufficient by themselves.\n");
+
+        sb.append("\nUNKNOWN / NOT YET ESTABLISHED\n");
+        sb.append("- Which functions consume the raw markers: UNKNOWN unless a GHIDRA_XREF_FUNCTION ")
+            .append("hit is shown.\n");
+        sb.append("- Network protocol and transport: UNKNOWN\n");
+        sb.append("- Authentication mechanism: UNKNOWN\n");
+        sb.append("- Matchmaking/session implementation: UNKNOWN\n");
+        sb.append("- Actual server endpoints: UNKNOWN unless a concrete endpoint string is found.\n");
+
+        sb.append("\nFUNCTIONS TO INVESTIGATE NEXT\n");
+        sb.append("- No function is promoted solely because a raw marker maps inside its address range.\n");
+        sb.append("- Prioritize markers with real Ghidra xrefs, then import the highest-ranked adjacent ")
+            .append("DLLs for their own xref/decompiler analysis.\n");
+
+        sb.append("\nNEXT PRESERVATION STEPS\n");
+        sb.append("- Use mapped raw file offsets as navigation targets in the current EXE.\n");
+        sb.append("- Improve targeted xref recovery around mapped markers if Ghidra has not created ")
+            .append("references automatically.\n");
+        sb.append("- If static xrefs remain absent, use the verified offline runtime-trace path.\n");
+
+        return sb.toString().trim();
     }
 
     private String buildNoEvidenceSynthesis(
