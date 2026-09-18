@@ -32,22 +32,30 @@ public class LocalAIPlugin extends ProgramPlugin {
 
     @Override
     protected void programActivated(Program program) {
-        provider.updateContextSummary(program, currentLocation);
+        if (provider != null) {
+            provider.updateContextSummary(program, currentLocation);
+        }
     }
 
     @Override
     protected void programDeactivated(Program program) {
-        provider.updateContextSummary(currentProgram, null);
+        if (provider != null) {
+            provider.updateContextSummary(currentProgram, null);
+        }
     }
 
     @Override
     protected void locationChanged(ProgramLocation location) {
-        provider.updateContextSummary(currentProgram, location);
+        if (provider != null) {
+            provider.updateContextSummary(currentProgram, location);
+        }
     }
 
     @Override
     public void dispose() {
-        provider.setVisible(false);
+        if (provider != null) {
+            provider.setVisible(false);
+        }
         super.dispose();
     }
 }
