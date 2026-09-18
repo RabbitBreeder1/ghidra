@@ -206,9 +206,13 @@ public class LocalAIProvider extends ComponentProviderAdapter {
         statusLabel.setText("Status: checking...");
         String url = urlField.getText();
 
+        String model = modelField.getText().trim();
+
         CompletableFuture.supplyAsync(() -> {
             try {
-                return ollamaClient.check(url);
+                String server = ollamaClient.check(url);
+                String modelResult = ollamaClient.checkModel(url, model);
+                return server + " at " + url + "\n" + modelResult;
             }
             catch (Exception e) {
                 throw new RuntimeException(e);
@@ -217,11 +221,11 @@ public class LocalAIProvider extends ComponentProviderAdapter {
             setBusy(false);
             if (error != null) {
                 statusLabel.setText("Status: failed");
-                appendSystem("Ollama check failed: " + rootMessage(error));
+                appendSystem("Ollama/model check failed: " + rootMessage(error));
             }
             else {
                 statusLabel.setText("Status: connected");
-                appendSystem(result + " at " + url);
+                appendSystem(result);
             }
         }));
     }
