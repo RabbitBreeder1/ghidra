@@ -27,7 +27,8 @@ public class ContextCollector {
             Program program,
             ProgramLocation location,
             ProtectionReport protectionReport,
-            NetworkReport networkReport) {
+            NetworkReport networkReport,
+            PreservationAnalysisReport preservationReport) {
 
         String protectionText = protectionReport == null
             ? "<not scanned>"
@@ -37,10 +38,14 @@ public class ContextCollector {
             ? "<not scanned>"
             : networkReport.toPromptText();
 
+        String preservationText = preservationReport == null
+            ? "<not run>"
+            : preservationReport.toPromptText();
+
         if (program == null || program.isClosed()) {
             return new ContextSnapshot(
                 null, null, null, "<no active program>", "", "", "", "", "", "", "",
-                protectionText, networkText
+                protectionText, networkText, preservationText
             );
         }
 
@@ -80,7 +85,8 @@ public class ContextCollector {
             cursorComment,
             decompiled,
             protectionText,
-            networkText
+            networkText,
+            preservationText
         );
     }
 
