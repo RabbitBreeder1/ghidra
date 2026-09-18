@@ -15,7 +15,8 @@ public record ContextSnapshot(
         String functionComment,
         String cursorComment,
         String decompiledCode,
-        String protectionReport) {
+        String protectionReport,
+        String networkReport) {
 
     public boolean hasFunction() {
         return functionEntry != null;
@@ -32,8 +33,13 @@ public record ContextSnapshot(
         sb.append("Prototype: ").append(nullToEmpty(prototype)).append('\n');
         sb.append("Function comment: ").append(nullToEmpty(functionComment)).append('\n');
         sb.append("Cursor EOL comment: ").append(nullToEmpty(cursorComment)).append('\n');
+
         sb.append("\nDRM / PROTECTION CHECK\n");
         sb.append(nullToEmpty(protectionReport)).append('\n');
+
+        sb.append("\nNETWORK / SERVER COMMUNICATION CHECK\n");
+        sb.append(nullToEmpty(networkReport)).append('\n');
+
         sb.append("\nDECOMPILED CODE\n");
         sb.append(decompiledCode == null || decompiledCode.isBlank()
                 ? "<no decompiled function available>"
