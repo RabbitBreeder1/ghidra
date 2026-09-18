@@ -16,7 +16,8 @@ public record ContextSnapshot(
         String cursorComment,
         String decompiledCode,
         String protectionReport,
-        String networkReport) {
+        String networkReport,
+        String preservationReport) {
 
     public boolean hasFunction() {
         return functionEntry != null;
@@ -39,6 +40,9 @@ public record ContextSnapshot(
 
         sb.append("\nNETWORK / SERVER COMMUNICATION CHECK\n");
         sb.append(nullToEmpty(networkReport)).append('\n');
+
+        sb.append("\nPRESERVATION ANALYSIS\n");
+        sb.append(nullToEmpty(preservationReport)).append('\n');
 
         sb.append("\nDECOMPILED CODE\n");
         sb.append(decompiledCode == null || decompiledCode.isBlank()
