@@ -1,7 +1,7 @@
 package ghidra.localai;
 
 public final class LocalAIBuildInfo {
-    public static final String BUILD_ID = "2026-09-18-preservation-r6";
+    public static final String BUILD_ID = "2026-09-18-preservation-r7";
 
     public static String loadedFrom() {
         try {
