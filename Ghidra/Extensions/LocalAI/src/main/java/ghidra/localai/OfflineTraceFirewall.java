@@ -155,7 +155,7 @@ public class OfflineTraceFirewall {
             for (Path executable : executables) {
                 body.append("  '")
                     .append(psSingleQuoted(executable.toString()))
-                    .append("',\r\n");
+                    .append("'\r\n");
             }
             body.append(")\r\n");
             body.append("$i = 0\r\n");
@@ -191,10 +191,14 @@ public class OfflineTraceFirewall {
 
         String scriptPath = psSingleQuoted(script.toAbsolutePath().toString());
 
+        String quotedScriptPath = scriptPath.replace("\"", "\\\"");
+        String argumentLine =
+            "-NoProfile -ExecutionPolicy Bypass -File \\\"" + quotedScriptPath + "\\\"";
+
         String command =
             "$p = Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru " +
-            "-ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File','" +
-            scriptPath + "'); exit $p.ExitCode";
+            "-ArgumentList '" + argumentLine.replace("'", "''") +
+            "'; exit $p.ExitCode";
 
         Process process = new ProcessBuilder(
             "powershell.exe",
