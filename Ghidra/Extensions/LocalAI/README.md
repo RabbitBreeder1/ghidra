@@ -31,13 +31,21 @@ locally hosted Ollama model.
 - Function renames use Ghidra's `SourceType.AI`.
 - Edit batches are Ghidra transactions. If one action fails, the entire AI edit batch rolls back.
 - The UI has an `Allow AI edits` checkbox. Disable it for read-only chat.
+- One-click DRM / protector heuristic scan using:
+  - imported library names
+  - defined strings
+  - memory-section names
+- Recognizes common indicators for Steam/SteamStub, Denuvo, VMProtect, Themida/WinLicense,
+  Arxan, SecuROM, SafeDisc, StarForce, Ubisoft Connect/Uplay, and UPX.
+- DRM/protector findings are added to subsequent LocalAI prompt context.
+- Protection detection is evidence-based and heuristic; it does not attempt to bypass or disable DRM.
 
 ## Default model
 
 The UI defaults to:
 
 ```
-qwen2.5-coder:7b
+qwen3-coder:30b
 ```
 
 You can type any installed Ollama model name into the Model field.
